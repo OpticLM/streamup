@@ -10,4 +10,12 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   target: 'es2022',
+  external: [
+    'react',
+    'react-dom',
+    'react/jsx-runtime',
+    'mermaid',
+    'katex',
+    'rehype-katex',
+  ],
 })

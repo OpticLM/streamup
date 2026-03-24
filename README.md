@@ -210,6 +210,26 @@ processMarkdown('# Hello', {
 | `urlTransform` | `UrlTransform` | — | Transform or remove URLs |
 | `allowElement` | `AllowElement` | — | Filter elements (return `false` to remove) |
 
+## Styling GFM task lists
+
+GFM task lists are rendered with class names from [remark-gfm](https://github.com/remarkjs/remark-gfm):
+
+- `ul.contains-task-list` — the list container
+- `li.task-list-item` — each task item (contains an `<input type="checkbox" disabled>`)
+
+```css
+ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+li.task-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+```
+
 ## Components you can override
 
 Every HTML element can be overridden. Each component receives its standard HTML props plus `node` (the HAST element).
