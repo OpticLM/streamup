@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import type { ReactElement } from 'react'
+import { useMemo, useRef } from 'react'
 import remend from 'remend'
 import type { PluggableList } from 'unified'
 import { parseMarkdownIntoBlocks } from './parse/blocks.js'
@@ -65,11 +66,34 @@ export function Streamup({
     ],
   )
 
+  // Cache processed blocks by content string to avoid re-running the unified
+  // pipeline for blocks whose text hasn't changed between streaming chunks.
+  const blockCacheRef = useRef<Map<string, ReactElement>>(new Map())
+
+  const rendered = useMemo(() => {
+    const prevCache = blockCacheRef.current
+    const nextCache = new Map<string, ReactElement>()
+
+    const result = blocks.map((block) => {
+      const cached = prevCache.get(block)
+      if (cached) {
+        nextCache.set(block, cached)
+        return cached
+      }
+      const element = processMarkdown(block, processOptions)
+      nextCache.set(block, element)
+      return element
+    })
+
+    blockCacheRef.current = nextCache
+    return result
+  }, [blocks, processOptions])
+
   return (
     <div className={className}>
-      {blocks.map((block, i) => (
+      {rendered.map((element, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional during streaming
-        <div key={`block-${i}`}>{processMarkdown(block, processOptions)}</div>
+        <div key={`block-${i}`}>{element}</div>
       ))}
     </div>
   )

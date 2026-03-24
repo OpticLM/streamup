@@ -28,8 +28,5 @@ jobs:
       - run: pnpm run test
       - run: pnpm run build
 
-      - name: Remove README to reduce package size
-        run: rm README.md
-
       - name: Publish to npm
         run: pnpm publish --provenance --access public --no-git-checks
