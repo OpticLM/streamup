@@ -1,7 +1,7 @@
 {
   "name": "@opticlm/streamup",
-  "version": "0.1.0",
-  "description": "A simple, headless React 19+ streaming markdown renderer with all plugins enabled by default",
+  "version": "0.1.1",
+  "description": "A simple, headless React streaming markdown renderer",
   "type": "module",
   "types": "dist/index.d.ts",
   "sideEffects": false,
@@ -30,6 +30,7 @@
     "format": "biome format --write .",
     "prepublishOnly": "npm run build"
   },
+  "keywords": ["markdown", "stream", "incomplete"],
   "author": "EFLKumo",
   "license": "MIT",
   "repository": {
