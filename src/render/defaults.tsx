@@ -1,10 +1,4 @@
-import {
-  Children,
-  cloneElement,
-  isValidElement,
-  type JSX,
-  type ReactElement,
-} from 'react'
+import { Children, isValidElement, type JSX, type ReactElement } from 'react'
 import type { Components, ExtraProps } from '../types.js'
 
 type WithNode<P> = P & ExtraProps
@@ -165,34 +159,34 @@ function Code({
   className,
   ...props
 }: WithNode<JSX.IntrinsicElements['code']>) {
-  const isBlock = 'data-block' in props
-  if (!isBlock) {
+  if ('data-block' in props) {
+    const {
+      'data-block': __,
+      'data-language': language = '',
+      ...rest
+    } = props as Record<string, unknown>
     return (
-      <code className={className} {...props}>
-        {children}
-      </code>
+      <pre>
+        <code
+          className={className}
+          data-language={language as string}
+          {...rest}
+        >
+          {children}
+        </code>
+      </pre>
     )
   }
 
-  const { 'data-block': __, ...rest } = props as Record<string, unknown>
-  const language = className?.replace(/^language-/, '') ?? ''
-
   return (
-    <pre>
-      <code className={className} data-language={language} {...rest}>
-        {children}
-      </code>
-    </pre>
+    <code className={className} {...props}>
+      {children}
+    </code>
   )
 }
 
-function Pre({ node: _, children }: WithNode<JSX.IntrinsicElements['pre']>) {
-  if (isValidElement(children)) {
-    return cloneElement(children as ReactElement<Record<string, unknown>>, {
-      'data-block': 'true',
-    })
-  }
-  return children
+function Pre({ node: _, ...props }: WithNode<JSX.IntrinsicElements['pre']>) {
+  return <pre {...props} />
 }
 
 export const defaultComponents: Components = {

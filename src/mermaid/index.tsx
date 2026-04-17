@@ -98,11 +98,12 @@ export function withMermaid(options?: WithMermaidOptions): Partial<Components> {
   const { config, fallbackCode } = options ?? {}
 
   return {
-    code: ({ children, className, node: _, ...props }) => {
-      const isBlock = 'data-block' in props
-      const language = className?.replace(/^language-/, '') ?? ''
-
-      if (isBlock && language === 'mermaid' && typeof children === 'string') {
+    code: ({ children, className, ...props }) => {
+      if (
+        'data-block' in props &&
+        (props as Record<string, unknown>)['data-language'] === 'mermaid' &&
+        typeof children === 'string'
+      ) {
         return <MermaidRenderer code={children} config={config} />
       }
 
@@ -116,7 +117,7 @@ export function withMermaid(options?: WithMermaidOptions): Partial<Components> {
         )
       }
 
-      if (!isBlock) {
+      if (!('data-block' in props)) {
         return (
           <code className={className} {...props}>
             {children}
@@ -124,10 +125,18 @@ export function withMermaid(options?: WithMermaidOptions): Partial<Components> {
         )
       }
 
-      const { 'data-block': __, ...rest } = props as Record<string, unknown>
+      const {
+        'data-block': __,
+        'data-language': language = '',
+        ...rest
+      } = props as Record<string, unknown>
       return (
         <pre>
-          <code className={className} data-language={language} {...rest}>
+          <code
+            className={className}
+            data-language={language as string}
+            {...rest}
+          >
             {children}
           </code>
         </pre>

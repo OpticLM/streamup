@@ -15,6 +15,7 @@ import remarkRehype from 'remark-rehype'
 import type { PluggableList } from 'unified'
 import { unified } from 'unified'
 import type { AllowElement, Components, UrlTransform } from '../types.js'
+import { rehypeCodeBlock } from './rehype-code-block.js'
 import { remarkCjkAutolinkBoundary } from './remark-cjk-autolink-boundary.js'
 import { remarkCodeMeta } from './remark-code-meta.js'
 
@@ -29,6 +30,8 @@ export const defaultSanitizeSchema: Schema = {
     code: [
       ...((defaultSchema.attributes?.code as string[]) ?? []),
       'metastring',
+      'dataBlock',
+      'dataLanguage',
     ],
   },
 }
@@ -83,6 +86,7 @@ const createProcessor = (options: ProcessorOptions) =>
     .use(options.extraRemarkPlugins ?? [])
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
+    .use(rehypeCodeBlock)
     .use(rehypeSanitize, options.sanitizeSchema ?? defaultSanitizeSchema)
     .use(options.extraRehypePlugins ?? [])
 

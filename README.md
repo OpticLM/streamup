@@ -25,9 +25,13 @@ import { Streamup } from '@opticlm/streamup'
     h1: ({ children }) => <h1 className="text-4xl font-bold">{children}</h1>,
     p: ({ children }) => <p className="my-4 leading-relaxed">{children}</p>,
     code: ({ children, className, ...props }) => {
-      const isBlock = 'data-block' in props
-      if (isBlock) {
-        return <pre className="bg-zinc-900 p-4 rounded"><code>{children}</code></pre>
+      if ('data-block' in props) {
+        const { 'data-language': language } = props
+        return (
+          <pre className="bg-zinc-900 p-4 rounded">
+            <code className={className}>{children}</code>
+          </pre>
+        )
       }
       return <code className="bg-zinc-100 px-1 rounded">{children}</code>
     },
@@ -235,6 +239,13 @@ li.task-list-item {
 Every HTML element can be overridden. Each component receives its standard HTML props plus `node` (the HAST element).
 
 Common overrides: `h1`–`h6`, `p`, `a`, `img`, `code`, `pre`, `blockquote`, `table`, `thead`, `tbody`, `tr`, `th`, `td`, `ol`, `ul`, `li`, `hr`, `strong`, `em`, `del`, `sup`, `sub`.
+
+### Code components
+
+Block code (` ```lang `) and inline code (`` `code` ``) both render as `<code>`, distinguished by the `data-block` prop set by the rehype plugin:
+
+- `data-block` — present (empty string) on block code, absent on inline code
+- `data-language` — the language identifier (e.g. `"js"`, `"python"`), only on block code
 
 ## License
 
