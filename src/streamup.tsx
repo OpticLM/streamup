@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { useMemo, useRef } from 'react'
+import { Fragment, useDeferredValue, useMemo, useRef } from 'react'
 import remend from 'remend'
 import type { PluggableList } from 'unified'
 import { parseMarkdownIntoBlocks } from './parse/blocks.js'
@@ -21,10 +21,7 @@ export function Streamup({
 }: StreamupProps) {
   const markdown = children ?? ''
 
-  const healed = useMemo(
-    () => (streaming ? remend(markdown) : markdown),
-    [streaming, markdown],
-  )
+  const deferred = useDeferredValue(markdown)
 
   const mergedComponents = useMemo(
     () => ({ ...defaultComponents, ...components }),
@@ -41,7 +38,17 @@ export function Streamup({
     return plugins.flatMap((p) => p.remarkPlugins ?? [])
   }, [plugins])
 
-  const blocks = useMemo(() => parseMarkdownIntoBlocks(healed), [healed])
+  const blocks = useMemo(() => {
+    const parsed = parseMarkdownIntoBlocks(deferred)
+    if (!streaming || parsed.length === 0) return parsed
+    const lastIndex = parsed.length - 1
+    const tail = parsed[lastIndex] as string
+    const healed = remend(tail)
+    if (healed === tail) return parsed
+    const next = parsed.slice()
+    next[lastIndex] = healed
+    return next
+  }, [deferred, streaming])
 
   const processOptions = useMemo<ProcessMarkdownOptions>(
     () => ({
@@ -93,7 +100,7 @@ export function Streamup({
     <div className={className}>
       {rendered.map((element, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional during streaming
-        <div key={`block-${i}`}>{element}</div>
+        <Fragment key={`block-${i}`}>{element}</Fragment>
       ))}
     </div>
   )

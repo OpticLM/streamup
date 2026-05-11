@@ -41,6 +41,26 @@ import { Streamup } from '@opticlm/streamup'
 </Streamup>
 ```
 
+## Stable streaming rate
+
+Streamup renders whatever string you pass each render. If your source emits
+tokens in bursts (e.g. an LLM delivering 50 tokens at once, then idling for
+200 ms), pace the source — Streamup will not buffer or smooth on its own.
+
+With the AI SDK `useChat` hook, set `experimental_throttle` (milliseconds):
+
+```tsx
+const { messages } = useChat({ experimental_throttle: 50 }) // ~20 fps cap
+```
+
+Lower values feel more live; higher values are smoother and cheaper. 30–80 ms
+is the useful range for chat UIs. The same idea applies to any custom source:
+coalesce deltas at a fixed cadence before they reach `<Streamup>`.
+
+Internally, Streamup uses `useDeferredValue` so a heavy tail block (table,
+code block, etc.) cannot block input or scroll, and only re-heals the last
+block on each chunk — keeping per-chunk cost flat as the buffer grows.
+
 ## What's included by default
 
 All parsing is always enabled:
