@@ -1,6 +1,7 @@
+export { extractLanguage, findCode, textOf } from './parse/processor.js'
 export { Streamup } from './streamup.js'
 export type {
-  CodeBlockComponent,
+  StreamupComponents,
   StreamupPlugin,
   StreamupProps,
 } from './types.js'

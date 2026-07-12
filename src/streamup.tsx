@@ -1,16 +1,9 @@
-import type { Components } from 'hast-util-to-jsx-runtime'
 import type { ReactNode } from 'react'
 import { Fragment, useMemo, useRef } from 'react'
 import type { PluggableList } from 'unified'
 import { splitBlocks } from './parse/blocks.js'
 import type { MdProcessor } from './parse/processor.js'
-import {
-  createProcessor,
-  extractLanguage,
-  findCode,
-  renderBlock,
-  textOf,
-} from './parse/processor.js'
+import { createProcessor, renderBlock } from './parse/processor.js'
 import type { StreamupProps } from './types.js'
 import { useThrottle } from './useThrottle.js'
 
@@ -18,7 +11,7 @@ export function Streamup({
   children,
   streaming = false,
   throttleMs = 50,
-  codeBlock,
+  components,
   plugins,
   singleDollarTextMath,
 }: StreamupProps) {
@@ -43,23 +36,6 @@ export function Streamup({
       }),
     [extraRemarkPlugins, extraRehypePlugins, singleDollarTextMath],
   )
-
-  const components = useMemo<Components | undefined>(() => {
-    if (!codeBlock) return undefined
-    return {
-      pre: ({ node, children }) => {
-        const code = node ? findCode(node) : undefined
-        if (code) {
-          const out = codeBlock({
-            language: extractLanguage(code.properties?.className),
-            code: textOf(code),
-          })
-          if (out !== undefined && out !== null) return out
-        }
-        return <pre>{children}</pre>
-      },
-    }
-  }, [codeBlock])
 
   const blocks = useMemo(
     () => splitBlocks(source, processor, streaming),

@@ -36,17 +36,62 @@ Internally the buffer is split into blocks (paragraphs, code, lists, …); only 
 
 ## Code blocks
 
-Inline code is always native `<code>`. Fenced (non-inline) code blocks render as native `<pre><code class="language-…">` by default. Pass a `codeBlock` component to take over fenced blocks entirely:
+Inline code is always native `<code>`. Fenced (non-inline) code blocks render as native `<pre><code class="language-…">` by default — that's what shadcn/typeset styles, so leave them alone unless you need something custom.
+
+To take over fenced code blocks, add the `rehypeCodeBlocks` plugin and map the `code-block` element it produces to a component. Your component receives a clean `{ language, code }` contract — no digging through the hast node:
 
 ```tsx
-<Streamup streaming codeBlock={...}>
+import { Streamup } from '@opticlm/streamup'
+import { rehypeCodeBlocks } from '@opticlm/streamup/code-block'
+
+const plugins = useMemo(() => [rehypeCodeBlocks()], [])
+const components = useMemo(
+  () => ({ 'code-block': ({ language, code }) => <MyCodeBlock language={language} code={code} /> }),
+  [],
+)
+
+<Streamup streaming plugins={plugins} components={components}>
   {markdown}
 </Streamup>
 ```
 
-Your `codeBlock` receives `{ language, code }` and returns a React node. Return `null`/`undefined` to fall back to the native `<pre><code>` for that block.
+`rehypeCodeBlocks` turns every fenced `<pre><code class="language-x">` into a `<code-block language="x" code="…">` element; `components['code-block']` renders it. If you use `rehypeCodeBlocks` you **must** map `code-block`. The exported `DefaultCodeBlock` renders native `<pre><code>`, so a custom component can delegate the blocks it doesn't care about:
 
-## LaTeX (KaTeX)
+```tsx
+import { Streamup } from '@opticlm/streamup'
+import { rehypeCodeBlocks, DefaultCodeBlock } from '@opticlm/streamup/code-block'
+
+// Highlight only `ts`; leave every other block as native <pre><code>.
+const components = useMemo(
+  () => ({
+    'code-block': ({ language, code }) =>
+      language === 'ts' ? <Highlighter code={code} /> : <DefaultCodeBlock language={language} code={code} />,
+  }),
+  [],
+)
+```
+
+You can also override any native element directly through `components` to pair with your own rehype plugins. Override `pre` and use the exported `findCode` / `extractLanguage` / `textOf` helpers to read the block:
+
+```tsx
+import { Streamup, findCode, extractLanguage, textOf } from '@opticlm/streamup'
+
+const components = useMemo(
+  () => ({
+    pre: ({ node, children }) => {
+      const code = node ? findCode(node) : undefined
+      return code
+        ? <MyCodeBlock language={extractLanguage(code.properties?.className)} code={textOf(code)} />
+        : <pre>{children}</pre>
+    },
+  }),
+  [],
+)
+```
+
+Memoize `components` so its identity stays stable — the streaming block cache keys on it.
+
+## KaTeX
 
 ```sh
 pnpm add katex
@@ -62,11 +107,10 @@ const plugins = useMemo(() => [katex()], [])
 <Streamup streaming plugins={plugins}>{'$$\nE = mc^2\n$$'}</Streamup>
 ```
 
-Math is always parsed. `katex()` renders it with KaTeX; on a TeX syntax error
-the raw source is shown as plain text. Display math is `$$` on its own line(s):
+Math is always parsed. `katex()` renders it with KaTeX; on a TeX syntax error the raw source is shown as plain text. Display math is `$$` on its own line(s):
 
 - Block (display): `$$` on its own line(s) — `$$\nE = mc^2\n$$` — or a fenced ` ```math ` block.
-- Inline: `$x^2$` — enable with `singleDollarTextMath`. (A single-line `$$x$$` is inline math in remark-math; use the multi-line form above for display.)
+- Inline: `$x^2$` — enable with `singleDollarTextMath`. A single-line `$$x$$` is inline math in remark-math; use the multi-line form above for display.
 
 ### Why `katex.min.css` is required
 
@@ -132,17 +176,6 @@ Since the KaTeX classes are plain CSS, override them directly. To control the di
 }
 ```
 
-If the default `text-align: center` doesn't reliably center the math in your layout (e.g. inside a flex or grid container), switch `.katex` to flexbox:
-
-```css
-.katex-display > .katex {
-  display: flex;
-  justify-content: center;
-}
-```
-
-This changes `.katex` from `display: block` (full width) to `display: flex` (width shrinks to fit content), and `justify-content: center` centers the visible `.katex-html` inside it.
-
 To adjust the base math font size:
 
 ```css
@@ -159,23 +192,32 @@ pnpm add mermaid
 
 ```tsx
 import { Streamup } from '@opticlm/streamup'
-import { mermaidCodeBlock } from '@opticlm/streamup/mermaid'
+import { MermaidRenderer, rehypeMermaid } from '@opticlm/streamup/mermaid'
 
-const renderMermaid = useMemo(() => mermaidCodeBlock({ config: { theme: 'dark' } }), [])
+const config = { theme: 'dark' }
+const plugins = useMemo(() => [rehypeMermaid()], [])
+const components = useMemo(
+  () => ({ 'mermaid-block': ({ code }) => <MermaidRenderer code={code} config={config} /> }),
+  [],
+)
 
-<Streamup streaming codeBlock={renderMermaid}>
+<Streamup streaming plugins={plugins} components={components}>
   {'```mermaid\nflowchart TD\n  A --> B\n```'}
 </Streamup>
 ```
 
-`mermaidCodeBlock` renders ` ```mermaid ` blocks as diagrams and leaves every other fenced language as native `<pre><code>`. On a Mermaid syntax error the raw source is shown as a code block. Or render directly:
+`rehypeMermaid` turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…">` element; map it via `components['mermaid-block']` (typically to `MermaidRenderer`). Every other fenced language stays native `<pre><code>` for typeset. On a Mermaid syntax error `MermaidRenderer` falls back to the raw source. Or render directly:
 
 ```tsx
 import { MermaidRenderer } from '@opticlm/streamup/mermaid'
 <MermaidRenderer code="flowchart TD; A-->B" config={{ theme: 'dark' }} />
 ```
 
-To compose Mermaid with a custom renderer for other languages, write your own `codeBlock` closure that delegates to a `mermaidCodeBlock()` instance for `language === 'mermaid'` and handles the rest itself.
+To render mermaid *and* customize other languages, list both plugins — `rehypeMermaid` first, then `rehypeCodeBlocks` and map both `mermaid-block` and `code-block`:
+
+```tsx
+const plugins = useMemo(() => [rehypeMermaid(), rehypeCodeBlocks()], [])
+```
 
 ## Props
 
@@ -184,7 +226,7 @@ To compose Mermaid with a custom renderer for other languages, write your own `c
 | `children` | `string` | `''` | Markdown content |
 | `streaming` | `boolean` | `false` | Heal incomplete markdown and throttle re-renders |
 | `throttleMs` | `number` | `50` | Minimum ms between re-renders in streaming mode; `0` disables throttling |
-| `codeBlock` | `CodeBlockComponent` | — | Override rendering for fenced (non-inline) code blocks |
+| `components` | `StreamupComponents` | — | Map hast tag names (and custom elements like `code-block`) to React components |
 | `plugins` | `StreamupPlugin[]` | `[]` | Add remark/rehype plugins (e.g. `katex()`) |
 | `singleDollarTextMath` | `boolean` | `false` | Enable `$...$` inline math syntax |
 
@@ -199,6 +241,8 @@ import myRehypePlugin from 'rehype-my-plugin'
 const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugin, { option: true }]] }), [])
 <Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
 ```
+
+When combining `katex()`, `rehypeMermaid()`, and `rehypeCodeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `rehypeCodeBlocks` consumes *every* remaining fenced block, so it must come last.
 
 ## What's parsed by default
 

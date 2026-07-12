@@ -1,5 +1,4 @@
 import type { Element, Root } from 'hast'
-import type { Components } from 'hast-util-to-jsx-runtime'
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime'
 import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
 import rehypeRaw from 'rehype-raw'
@@ -12,6 +11,7 @@ import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import type { PluggableList } from 'unified'
 import { unified } from 'unified'
+import type { StreamupComponents } from '../types.js'
 import { remarkCjkAutolinkBoundary } from './remark-cjk-autolink-boundary.js'
 
 const sanitizeSchema = {
@@ -77,7 +77,7 @@ export function renderBlock(
   {
     processor,
     components,
-  }: { processor: MdProcessor; components?: Components },
+  }: { processor: MdProcessor; components?: StreamupComponents },
 ) {
   const tree = processor.runSync(processor.parse(block), block) as Root
   return toJsxRuntime(tree, {

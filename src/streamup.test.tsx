@@ -2,6 +2,9 @@ import { act, cleanup, render } from '@testing-library/react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { rehypeCodeBlocks } from './code-block/index.js'
+import type { CodeBlockProps } from './code-block/types.js'
+import { extractLanguage, findCode, textOf } from './parse/processor.js'
 import { Streamup } from './streamup.js'
 
 describe('Streamup', () => {
@@ -73,13 +76,16 @@ describe('Streamup', () => {
     expect(html).not.toContain('<script>')
   })
 
-  it('applies codeBlock to fenced code blocks', () => {
+  it('renders a code-block component mapped via rehypeCodeBlocks', () => {
     const html = renderToStaticMarkup(
       createElement(
         Streamup,
         {
-          codeBlock: ({ language, code }) =>
-            createElement('pre', { 'data-lang': language }, code),
+          plugins: [rehypeCodeBlocks()],
+          components: {
+            'code-block': ({ language, code }: CodeBlockProps) =>
+              createElement('pre', { 'data-lang': language }, code),
+          },
         },
         '```js\nconst x = 1\n```',
       ),
@@ -88,16 +94,57 @@ describe('Streamup', () => {
     expect(html).toContain('const x = 1')
   })
 
-  it('falls back to native <pre> when codeBlock returns undefined', () => {
+  it('supports overriding pre directly via components (native path)', () => {
     const html = renderToStaticMarkup(
       createElement(
         Streamup,
-        { codeBlock: () => undefined },
+        {
+          components: {
+            pre: ({ node, children }) => {
+              const code = node ? findCode(node) : undefined
+              if (code) {
+                return createElement(
+                  'pre',
+                  { 'data-lang': extractLanguage(code.properties?.className) },
+                  textOf(code),
+                )
+              }
+              return createElement('pre', null, children)
+            },
+          },
+        },
         '```js\nconst x = 1\n```',
       ),
     )
+    expect(html).toContain('data-lang="js"')
+    expect(html).toContain('const x = 1')
+  })
+
+  it('renders native pre>code with language class by default', () => {
+    const html = renderToStaticMarkup(
+      createElement(Streamup, null, '```js\nconst x = 1\n```'),
+    )
     expect(html).toContain('language-js')
     expect(html).toContain('const x = 1')
+    expect(html).toContain('<pre>')
+  })
+
+  it('handles unlabeled fenced code via rehypeCodeBlocks', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        Streamup,
+        {
+          plugins: [rehypeCodeBlocks()],
+          components: {
+            'code-block': ({ language, code }: CodeBlockProps) =>
+              createElement('div', { 'data-lang': language || 'none' }, code),
+          },
+        },
+        '```\nplain code\n```',
+      ),
+    )
+    expect(html).toContain('data-lang="none"')
+    expect(html).toContain('plain code')
   })
 })
 
