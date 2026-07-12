@@ -2,41 +2,58 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Streamup } from '../streamup.js'
-import { MermaidRenderer, withMermaid } from './index.js'
+import { MermaidRenderer, mermaidCodeBlock } from './index.js'
 
-describe('withMermaid', () => {
-  it('routes mermaid flowchart to MermaidRenderer', () => {
+describe('mermaidCodeBlock', () => {
+  it('routes mermaid flowchart to MermaidRenderer (SSR fallback)', () => {
     const md = '```mermaid\nflowchart TD\n    A --> B\n```'
     const html = renderToStaticMarkup(
-      createElement(Streamup, { components: withMermaid() }, md),
+      createElement(
+        Streamup,
+        { streaming: true, codeBlock: mermaidCodeBlock() },
+        md,
+      ),
     )
+    // SSR: useEffect does not run, so MermaidRenderer returns its <pre><code>
+    // fallback. The diagram source is present, the language class is not
+    // (mermaidCodeBlock consumed the block instead of emitting native code).
     expect(html).not.toContain('language-mermaid')
     expect(html).toContain('flowchart')
   })
 
-  it('routes mermaid pie chart to MermaidRenderer', () => {
+  it('routes a mermaid pie chart through the fallback', () => {
     const md =
       '```mermaid\npie title Pets\n    "Dogs" : 386\n    "Cats" : 85\n```'
     const html = renderToStaticMarkup(
-      createElement(Streamup, { components: withMermaid() }, md),
+      createElement(
+        Streamup,
+        { streaming: true, codeBlock: mermaidCodeBlock() },
+        md,
+      ),
     )
     expect(html).not.toContain('language-mermaid')
     expect(html).toContain('pie title Pets')
     expect(html).toContain('&quot;Dogs&quot;')
   })
 
-  it('passes non-mermaid code blocks to fallback', () => {
+  it('leaves non-mermaid code blocks as native <pre><code>', () => {
     const md = '```js\nconsole.log("hi")\n```'
     const html = renderToStaticMarkup(
-      createElement(Streamup, { components: withMermaid() }, md),
+      createElement(
+        Streamup,
+        { streaming: true, codeBlock: mermaidCodeBlock() },
+        md,
+      ),
     )
+    // mermaidCodeBlock returns undefined for non-mermaid, so the pre override
+    // falls back to native <pre><code class="language-js">.
     expect(html).toContain('language-js')
     expect(html).toContain('console.log')
   })
 })
 
 describe('MermaidRenderer', () => {
-  it('renders raw code as fallback in SSR', () => {
+  it('renders raw code as the fallback in SSR', () => {
     const html = renderToStaticMarkup(
       createElement(MermaidRenderer, {
         code: 'pie title Test\n    "A" : 50\n    "B" : 50',

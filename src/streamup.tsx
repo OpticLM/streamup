@@ -1,107 +1,109 @@
-import type { ReactElement } from 'react'
-import { Fragment, useDeferredValue, useMemo, useRef } from 'react'
-import remend from 'remend'
+import type { Components } from 'hast-util-to-jsx-runtime'
+import type { ReactNode } from 'react'
+import { Fragment, useMemo, useRef } from 'react'
 import type { PluggableList } from 'unified'
-import { parseMarkdownIntoBlocks } from './parse/blocks.js'
-import type { ProcessMarkdownOptions } from './parse/processor.js'
-import { processMarkdown } from './parse/processor.js'
-import { defaultComponents } from './render/defaults.js'
+import { splitBlocks } from './parse/blocks.js'
+import type { MdProcessor } from './parse/processor.js'
+import {
+  createProcessor,
+  extractLanguage,
+  findCode,
+  renderBlock,
+  textOf,
+} from './parse/processor.js'
 import type { StreamupProps } from './types.js'
+import { useThrottle } from './useThrottle.js'
 
 export function Streamup({
   children,
   streaming = false,
-  components,
+  throttleMs = 50,
+  codeBlock,
   plugins,
-  className,
   singleDollarTextMath,
-  sanitizeSchema,
-  urlTransform,
-  allowElement,
 }: StreamupProps) {
   const markdown = children ?? ''
+  const source = useThrottle(markdown, streaming ? throttleMs : 0)
 
-  const deferred = useDeferredValue(markdown)
-
-  const mergedComponents = useMemo(
-    () => ({ ...defaultComponents, ...components }),
-    [components],
+  const extraRemarkPlugins = useMemo<PluggableList>(
+    () => (plugins ?? []).flatMap((p) => p.remarkPlugins ?? []),
+    [plugins],
+  )
+  const extraRehypePlugins = useMemo<PluggableList>(
+    () => (plugins ?? []).flatMap((p) => p.rehypePlugins ?? []),
+    [plugins],
   )
 
-  const extraRehypePlugins = useMemo<PluggableList>(() => {
-    if (!plugins?.length) return []
-    return plugins.flatMap((p) => p.rehypePlugins ?? [])
-  }, [plugins])
-
-  const extraRemarkPlugins = useMemo<PluggableList>(() => {
-    if (!plugins?.length) return []
-    return plugins.flatMap((p) => p.remarkPlugins ?? [])
-  }, [plugins])
-
-  const blocks = useMemo(() => {
-    const parsed = parseMarkdownIntoBlocks(deferred)
-    if (!streaming || parsed.length === 0) return parsed
-    const lastIndex = parsed.length - 1
-    const tail = parsed[lastIndex] as string
-    const healed = remend(tail)
-    if (healed === tail) return parsed
-    const next = parsed.slice()
-    next[lastIndex] = healed
-    return next
-  }, [deferred, streaming])
-
-  const processOptions = useMemo<ProcessMarkdownOptions>(
-    () => ({
-      components: mergedComponents,
-      processorOptions: {
+  const processor = useMemo<MdProcessor>(
+    () =>
+      createProcessor({
         extraRemarkPlugins,
         extraRehypePlugins,
         singleDollarTextMath,
-        sanitizeSchema,
-      },
-      urlTransform,
-      allowElement,
-    }),
-    [
-      mergedComponents,
-      extraRemarkPlugins,
-      extraRehypePlugins,
-      singleDollarTextMath,
-      sanitizeSchema,
-      urlTransform,
-      allowElement,
-    ],
+      }),
+    [extraRemarkPlugins, extraRehypePlugins, singleDollarTextMath],
   )
 
-  // Cache processed blocks by content string to avoid re-running the unified
-  // pipeline for blocks whose text hasn't changed between streaming chunks.
-  const blockCacheRef = useRef<Map<string, ReactElement>>(new Map())
+  const components = useMemo<Components | undefined>(() => {
+    if (!codeBlock) return undefined
+    return {
+      pre: ({ node, children }) => {
+        const code = node ? findCode(node) : undefined
+        if (code) {
+          const out = codeBlock({
+            language: extractLanguage(code.properties?.className),
+            code: textOf(code),
+          })
+          if (out !== undefined && out !== null) return out
+        }
+        return <pre>{children}</pre>
+      },
+    }
+  }, [codeBlock])
 
+  const blocks = useMemo(
+    () => splitBlocks(source, processor, streaming),
+    [source, processor, streaming],
+  )
+
+  const cacheRef = useRef({
+    processor,
+    components,
+    map: new Map<string, ReactNode>(),
+  })
   const rendered = useMemo(() => {
-    const prevCache = blockCacheRef.current
-    const nextCache = new Map<string, ReactElement>()
-
+    if (
+      cacheRef.current.processor !== processor ||
+      cacheRef.current.components !== components
+    ) {
+      cacheRef.current = {
+        processor,
+        components,
+        map: new Map<string, ReactNode>(),
+      }
+    }
+    const cache = cacheRef.current.map
+    const next = new Map<string, ReactNode>()
     const result = blocks.map((block) => {
-      const cached = prevCache.get(block)
+      const cached = cache.get(block)
       if (cached) {
-        nextCache.set(block, cached)
+        next.set(block, cached)
         return cached
       }
-      const element = processMarkdown(block, processOptions)
-      nextCache.set(block, element)
+      const element = renderBlock(block, { processor, components })
+      next.set(block, element)
       return element
     })
-
-    blockCacheRef.current = nextCache
+    cacheRef.current.map = next
     return result
-  }, [blocks, processOptions])
+  }, [blocks, processor, components])
 
   return (
-    <div className={className}>
+    <>
       {rendered.map((element, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional during streaming
-        <Fragment key={`block-${i}`}>{element}</Fragment>
+        <Fragment key={i}>{element}</Fragment>
       ))}
-    </div>
+    </>
   )
 }

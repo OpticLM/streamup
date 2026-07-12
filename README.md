@@ -1,82 +1,55 @@
 # @opticlm/streamup
 
-A simple, headless React streaming markdown renderer.
+A headless React streaming markdown renderer. Pass it a Markdown string — change that string as often as you like — and it renders the HTML. No wrappers, no overrides to maintain: the output is plain semantic HTML you can style with [shadcn/typeset](https://ui.shadcn.com/docs/typeset).
 
 ## Install
 
-```bash
+```sh
 pnpm add @opticlm/streamup react react-dom
 ```
 
 ## Usage
 
 ```tsx
-import { Streamup } from '@opticlm/streamup'
-
-// Basic
+// Static
 <Streamup>{'# Hello **world**'}</Streamup>
 
-// Streaming (incomplete markdown)
-<Streamup streaming>{'**bold text without clos'}</Streamup>
-
-// Custom components
-<Streamup
-  components={{
-    h1: ({ children }) => <h1 className="text-4xl font-bold">{children}</h1>,
-    p: ({ children }) => <p className="my-4 leading-relaxed">{children}</p>,
-    code: ({ children, className, ...props }) => {
-      if ('data-block' in props) {
-        const { 'data-language': language } = props
-        return (
-          <pre className="bg-zinc-900 p-4 rounded">
-            <code className={className}>{children}</code>
-          </pre>
-        )
-      }
-      return <code className="bg-zinc-100 px-1 rounded">{children}</code>
-    },
-  }}
->
-  {markdown}
+// Streaming: heal incomplete markdown and throttle re-renders to a stable cadence
+<Streamup streaming throttleMs={50}>
+  {'**bold text without a closing'}
 </Streamup>
+```
+
+Wrap it in a styled container and the inner HTML is plain semantic elements:
+
+```tsx
+<div className="typeset typeset-docs">
+  <Streamup streaming>{markdown}</Streamup>
+</div>
 ```
 
 ## Stable streaming rate
 
-Streamup renders whatever string you pass each render. If your source emits
-tokens in bursts (e.g. an LLM delivering 50 tokens at once, then idling for
-200 ms), pace the source — Streamup will not buffer or smooth on its own.
+When `streaming` is on, `Streamup` throttles re-renders to one per `throttleMs` (default 50 ms ≈ 20 fps), always committing the latest input. The output rate is decoupled from how fast the input changes — burst or trickle, the component renders at a steady cadence. Set `throttleMs={0}` to disable throttling and render on every change.
 
-With the AI SDK `useChat` hook, set `experimental_throttle` (milliseconds):
+Internally the buffer is split into blocks (paragraphs, code, lists, …); only the trailing block is healed on each chunk, and unchanged blocks are cached, so per-chunk cost stays flat as the buffer grows.
+
+## Code blocks
+
+Inline code is always native `<code>`. Fenced (non-inline) code blocks render as native `<pre><code class="language-…">` by default. Pass a `codeBlock` component to take over fenced blocks entirely:
 
 ```tsx
-const { messages } = useChat({ experimental_throttle: 50 }) // ~20 fps cap
+<Streamup streaming codeBlock={...}>
+  {markdown}
+</Streamup>
 ```
 
-Lower values feel more live; higher values are smoother and cheaper. 30–80 ms
-is the useful range for chat UIs. The same idea applies to any custom source:
-coalesce deltas at a fixed cadence before they reach `<Streamup>`.
+Your `codeBlock` receives `{ language, code }` and returns a React node. Return `null`/`undefined` to fall back to the native `<pre><code>` for that block.
 
-Internally, Streamup uses `useDeferredValue` so a heavy tail block (table,
-code block, etc.) cannot block input or scroll, and only re-heals the last
-block on each chunk — keeping per-chunk cost flat as the buffer grows.
+## LaTeX (KaTeX)
 
-## What's included by default
-
-All parsing is always enabled:
-
-- **GFM**: tables, strikethrough, task lists, autolinks
-- **Math**: block equtions
-- **CJK**: proper emphasis, strikethrough, and autolink handling for Chinese/Japanese/Korean text
-- **HTML**: raw HTML with sanitization
-- **Footnotes**: reference and definition syntax
-
-## KaTeX rendering
-
-Math syntax is always parsed. To render it with KaTeX, add the plugin:
-
-```bash
-pnpm add katex rehype-katex
+```sh
+pnpm add katex
 ```
 
 ```tsx
@@ -84,188 +57,73 @@ import { Streamup } from '@opticlm/streamup'
 import { katex } from '@opticlm/streamup/katex'
 import 'katex/dist/katex.min.css'
 
-// Default options
-<Streamup plugins={[katex()]}>{'$$E = mc^2$$'}</Streamup>
+const plugins = useMemo(() => [katex()], [])
 
-// Custom KaTeX options
-<Streamup plugins={[katex({ errorColor: '#ff0000', strict: false })]}>
-  {'$$E = mc^2$$'}
-</Streamup>
+<Streamup streaming plugins={plugins}>{'$$\nE = mc^2\n$$'}</Streamup>
 ```
 
-## Mermaid diagrams
+Math is always parsed. `katex()` renders it with KaTeX; on a TeX syntax error
+the raw source is shown as plain text. Display math is `$$` on its own line(s):
 
-```bash
+- Block (display): `$$` on its own line(s) — `$$\nE = mc^2\n$$` — or a fenced ` ```math ` block.
+- Inline: `$x^2$` — enable with `singleDollarTextMath`. (A single-line `$$x$$` is inline math in remark-math; use the multi-line form above for display.)
+
+## Mermaid
+
+```sh
 pnpm add mermaid
 ```
 
 ```tsx
 import { Streamup } from '@opticlm/streamup'
-import { withMermaid } from '@opticlm/streamup/mermaid'
+import { mermaidCodeBlock } from '@opticlm/streamup/mermaid'
 
-// Default
-<Streamup components={withMermaid()}>
-  {'```mermaid\ngraph TD\n  A-->B\n```'}
-</Streamup>
+const renderMermaid = useMemo(() => mermaidCodeBlock({ config: { theme: 'dark' } }), [])
 
-// With mermaid config (theme, flowchart direction, etc.)
-<Streamup components={withMermaid({ config: { theme: 'dark' } })}>
-  {'```mermaid\ngraph TD\n  A-->B\n```'}
-</Streamup>
-
-// With custom fallback code component
-<Streamup components={withMermaid({
-  config: { theme: 'forest' },
-  fallbackCode: MyCodeBlock,
-})}>
-  {markdown}
+<Streamup streaming codeBlock={renderMermaid}>
+  {'```mermaid\nflowchart TD\n  A --> B\n```'}
 </Streamup>
 ```
 
-Or use the renderer directly:
+`mermaidCodeBlock` renders ` ```mermaid ` blocks as diagrams and leaves every other fenced language as native `<pre><code>`. On a Mermaid syntax error the raw source is shown as a code block. Or render directly:
 
 ```tsx
 import { MermaidRenderer } from '@opticlm/streamup/mermaid'
-
-<MermaidRenderer code="graph TD; A-->B" config={{ theme: 'dark' }} />
+<MermaidRenderer code="flowchart TD; A-->B" config={{ theme: 'dark' }} />
 ```
 
-## Configuration
-
-### Single-dollar math
-
-By default, only `$$...$$` block math is enabled. Enable `$...$` inline math:
-
-```tsx
-<Streamup singleDollarTextMath>{markdown}</Streamup>
-```
-
-### URL transform
-
-Transform or remove URLs before rendering:
-
-```tsx
-<Streamup urlTransform={(url) => url.replace('http:', 'https:')}>
-  {markdown}
-</Streamup>
-
-// Remove all links
-<Streamup urlTransform={() => null}>{markdown}</Streamup>
-```
-
-### Element filtering
-
-Filter which elements are allowed to render. Returning `false` removes the element but keeps its children:
-
-```tsx
-<Streamup allowElement={(el) => el.tagName !== 'img'}>
-  {markdown}
-</Streamup>
-```
-
-### Custom sanitization
-
-Replace the default sanitization schema. Spread `defaultSanitizeSchema` to extend it:
-
-```tsx
-import { Streamup, defaultSanitizeSchema } from '@opticlm/streamup'
-
-<Streamup sanitizeSchema={{
-  ...defaultSanitizeSchema,
-  attributes: {
-    ...defaultSanitizeSchema.attributes,
-    div: ['className', 'style'],
-  },
-}}>
-  {markdown}
-</Streamup>
-```
-
-### Custom remark/rehype plugins
-
-Add custom remark or rehype plugins via the plugin system:
-
-```tsx
-import type { StreamupPlugin } from '@opticlm/streamup'
-import myRemarkPlugin from 'remark-my-plugin'
-import myRehypePlugin from 'rehype-my-plugin'
-
-const myPlugin: StreamupPlugin = {
-  remarkPlugins: [myRemarkPlugin],
-  rehypePlugins: [[myRehypePlugin, { option: true }]],
-}
-
-<Streamup plugins={[myPlugin]}>{markdown}</Streamup>
-```
-
-## Utilities
-
-```ts
-import { remend, parseMarkdownIntoBlocks, processMarkdown } from '@opticlm/streamup'
-
-// Heal incomplete markdown (streaming)
-remend('**bold')        // '**bold**'
-remend('~~strike')      // '~~strike~~'
-remend('[link](http')   // '[link](streamup:incomplete-link)'
-
-// Split markdown into blocks for incremental rendering
-parseMarkdownIntoBlocks('# Title\n\nParagraph')
-// ['# Title\n\n', 'Paragraph\n']
-
-// Low-level: process markdown to React elements
-processMarkdown('# Hello', {
-  components: myComponents,
-  processorOptions: { singleDollarTextMath: true },
-  urlTransform: (url) => url,
-})
-```
+To compose Mermaid with a custom renderer for other languages, write your own `codeBlock` closure that delegates to a `mermaidCodeBlock()` instance for `language === 'mermaid'` and handles the rest itself.
 
 ## Props
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `children` | `string` | `''` | Markdown content |
-| `streaming` | `boolean` | `false` | Heal incomplete markdown before rendering |
-| `components` | `Partial<Components>` | unstyled HTML | Override rendering for any element |
+| `streaming` | `boolean` | `false` | Heal incomplete markdown and throttle re-renders |
+| `throttleMs` | `number` | `50` | Minimum ms between re-renders in streaming mode; `0` disables throttling |
+| `codeBlock` | `CodeBlockComponent` | — | Override rendering for fenced (non-inline) code blocks |
 | `plugins` | `StreamupPlugin[]` | `[]` | Add remark/rehype plugins (e.g. `katex()`) |
-| `className` | `string` | — | Class on the wrapper `<div>` |
 | `singleDollarTextMath` | `boolean` | `false` | Enable `$...$` inline math syntax |
-| `sanitizeSchema` | `SanitizeSchema` | built-in | Custom HTML sanitization schema |
-| `urlTransform` | `UrlTransform` | — | Transform or remove URLs |
-| `allowElement` | `AllowElement` | — | Filter elements (return `false` to remove) |
+
+## Plugins
+
+Add any remark/rehype plugin via `plugins`:
+
+```tsx
+import type { StreamupPlugin } from '@opticlm/streamup'
+import myRehypePlugin from 'rehype-my-plugin'
+
+const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugin, { option: true }]] }), [])
+<Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
+```
+
+## What's parsed by default
+
+GFM (tables, strikethrough, task lists, autolinks, footnotes), math (block `$$…$$` by default), raw HTML (sanitized), and correct emphasis/strikethrough/autolinks for CJK text.
 
 ## Styling GFM task lists
 
-GFM task lists are rendered with class names from [remark-gfm](https://github.com/remarkjs/remark-gfm):
-
-- `ul.contains-task-list` — the list container
-- `li.task-list-item` — each task item (contains an `<input type="checkbox" disabled>`)
-
-```css
-ul.contains-task-list {
-  list-style: none;
-  padding-left: 0;
-}
-
-li.task-list-item {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5em;
-}
-```
-
-## Components you can override
-
-Every HTML element can be overridden. Each component receives its standard HTML props plus `node` (the HAST element).
-
-Common overrides: `h1`–`h6`, `p`, `a`, `img`, `code`, `pre`, `blockquote`, `table`, `thead`, `tbody`, `tr`, `th`, `td`, `ol`, `ul`, `li`, `hr`, `strong`, `em`, `del`, `sup`, `sub`.
-
-### Code components
-
-Block code (` ```lang `) and inline code (`` `code` ``) both render as `<code>`, distinguished by the `data-block` prop set by the rehype plugin:
-
-- `data-block` — present (empty string) on block code, absent on inline code
-- `data-language` — the language identifier (e.g. `"js"`, `"python"`), only on block code
+GFM task lists use remark-gfm's class names — `ul.contains-task-list` and `li.task-list-item` (containing `<input type="checkbox" disabled>`).
 
 ## License
 

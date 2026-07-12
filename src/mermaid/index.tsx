@@ -1,6 +1,5 @@
 import type { MermaidConfig } from 'mermaid'
-import { useEffect, useId, useRef, useState } from 'react'
-import type { Components } from '../types.js'
+import { useEffect, useId, useState } from 'react'
 
 export type { MermaidConfig } from 'mermaid'
 
@@ -11,58 +10,32 @@ interface MermaidRendererProps {
 
 export function MermaidRenderer({ code, config }: MermaidRendererProps) {
   const id = useId().replace(/:/g, '_')
-  const containerRef = useRef<HTMLDivElement>(null)
   const [svg, setSvg] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const lastValidSvg = useRef<string | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-
-    const render = async () => {
-      try {
-        const mermaid = await import('mermaid')
-        mermaid.default.initialize({
-          startOnLoad: false,
-          ...config,
-        })
-        const { svg: renderedSvg } = await mermaid.default.render(
-          `mermaid-${id}`,
-          code,
-        )
-        if (!cancelled) {
-          setSvg(renderedSvg)
-          lastValidSvg.current = renderedSvg
-          setError(null)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err))
-          if (lastValidSvg.current) {
-            setSvg(lastValidSvg.current)
-          }
-        }
-      }
-    }
-
-    render()
+    setSvg(null)
+    setFailed(false)
+    import('mermaid')
+      .then((mod) => {
+        if (cancelled) return
+        const mermaid = mod.default
+        mermaid.initialize({ startOnLoad: false, ...config })
+        return mermaid.render(`mermaid-${id}`, code)
+      })
+      .then((res) => {
+        if (!cancelled && res) setSvg(res.svg)
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
     return () => {
       cancelled = true
     }
   }, [code, id, config])
 
-  if (error && !svg) {
-    return (
-      <div>
-        <p>Mermaid rendering error: {error}</p>
-        <pre>
-          <code>{code}</code>
-        </pre>
-      </div>
-    )
-  }
-
-  if (!svg) {
+  if (failed || svg === null) {
     return (
       <pre>
         <code>{code}</code>
@@ -72,75 +45,20 @@ export function MermaidRenderer({ code, config }: MermaidRendererProps) {
 
   return (
     <div
-      ref={containerRef}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid produces trusted SVG
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
 }
 
-export interface WithMermaidOptions {
-  /** Mermaid configuration (theme, flowchart direction, etc.) */
+export interface MermaidCodeBlockOptions {
   config?: MermaidConfig
-  /** Custom code component for non-mermaid code blocks */
-  fallbackCode?: Components['code']
 }
 
-/**
- * Create component overrides that render mermaid code blocks as diagrams.
- *
- * ```tsx
- * import { withMermaid } from '@opticlm/streamup/mermaid'
- * <Streamup components={withMermaid({ config: { theme: 'dark' } })}>
- * ```
- */
-export function withMermaid(options?: WithMermaidOptions): Partial<Components> {
-  const { config, fallbackCode } = options ?? {}
-
-  return {
-    code: ({ children, className, ...props }) => {
-      if (
-        'data-block' in props &&
-        (props as Record<string, unknown>)['data-language'] === 'mermaid' &&
-        typeof children === 'string'
-      ) {
-        return <MermaidRenderer code={children} config={config} />
-      }
-
-      if (fallbackCode) {
-        const FallbackCode = fallbackCode
-        return (
-          // @ts-expect-error -- component union type
-          <FallbackCode className={className} {...props}>
-            {children}
-          </FallbackCode>
-        )
-      }
-
-      if (!('data-block' in props)) {
-        return (
-          <code className={className} {...props}>
-            {children}
-          </code>
-        )
-      }
-
-      const {
-        'data-block': __,
-        'data-language': language = '',
-        ...rest
-      } = props as Record<string, unknown>
-      return (
-        <pre>
-          <code
-            className={className}
-            data-language={language as string}
-            {...rest}
-          >
-            {children}
-          </code>
-        </pre>
-      )
-    },
-  }
+export function mermaidCodeBlock(options?: MermaidCodeBlockOptions) {
+  const config = options?.config
+  return ({ language, code }: { language: string; code: string }) =>
+    language === 'mermaid' ? (
+      <MermaidRenderer code={code} config={config} />
+    ) : undefined
 }

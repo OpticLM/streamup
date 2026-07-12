@@ -22,6 +22,7 @@
   "files": ["dist/**/*.js", "dist/**/*.d.ts", "LICENSE"],
   "scripts": {
     "build": "tsup",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -50,10 +51,8 @@
     }
   },
   "dependencies": {
-    "hast-util-sanitize": "^5.0.2",
+    "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
-    "html-url-attributes": "^3.0.1",
-    "marked": "^17.0.5",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-cjk-friendly": "^2.0.1",
@@ -80,7 +79,6 @@
     "mermaid": "^11.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "rehype-katex": "^7.0.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9",
     "vitest": "^4"
