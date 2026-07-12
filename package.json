@@ -3,25 +3,25 @@
   "version": "0.2.1",
   "description": "A simple, headless React streaming markdown renderer",
   "type": "module",
-  "types": "dist/index.d.ts",
+  "types": "dist/index.d.mts",
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
     },
     "./katex": {
-      "types": "./dist/katex/index.d.ts",
-      "default": "./dist/katex/index.js"
+      "types": "./dist/katex/index.d.mts",
+      "default": "./dist/katex/index.mjs"
     },
     "./mermaid": {
-      "types": "./dist/mermaid/index.d.ts",
-      "default": "./dist/mermaid/index.js"
+      "types": "./dist/mermaid/index.d.mts",
+      "default": "./dist/mermaid/index.mjs"
     }
   },
-  "files": ["dist/**/*.js", "dist/**/*.d.ts", "LICENSE"],
+  "files": ["dist/**/*.mjs", "dist/**/*.d.mts", "LICENSE"],
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -31,7 +31,7 @@
     "format": "biome format --write .",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["markdown", "stream", "incomplete"],
+  "keywords": ["markdown", "stream"],
   "author": "EFLKumo",
   "license": "MIT",
   "repository": {
@@ -79,7 +79,7 @@
     "mermaid": "^11.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.22.4",
     "typescript": "^5.9",
     "vitest": "^4"
   },

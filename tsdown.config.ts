@@ -1,4 +1,4 @@
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: ['src/index.ts', 'src/katex/index.tsx', 'src/mermaid/index.tsx'],
@@ -6,9 +6,18 @@ export default defineConfig({
   minify: true,
   dts: true,
   treeshake: true,
-  splitting: false,
   clean: true,
   outDir: 'dist',
   target: 'es2022',
-  external: ['react', 'react-dom', 'react/jsx-runtime', 'mermaid', 'katex'],
+  sourcemap: false,
+  deps: {
+    onlyBundle: false,
+    neverBundle: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'mermaid',
+      'katex',
+    ],
+  },
 })
