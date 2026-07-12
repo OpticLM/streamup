@@ -68,6 +68,89 @@ the raw source is shown as plain text. Display math is `$$` on its own line(s):
 - Block (display): `$$` on its own line(s) — `$$\nE = mc^2\n$$` — or a fenced ` ```math ` block.
 - Inline: `$x^2$` — enable with `singleDollarTextMath`. (A single-line `$$x$$` is inline math in remark-math; use the multi-line form above for display.)
 
+### Why `katex.min.css` is required
+
+KaTeX renders TeX into HTML with its own class names (`.katex`, `.katex-display`, `.base`, `.mfrac`, etc.) and loads custom fonts for math symbols (KaTeX_Main, KaTeX_Math, KaTeX_AMS, KaTeX_Size1–4, …). The CSS file provides:
+
+- `@font-face` declarations for all 13 KaTeX font families.
+- Layout and spacing for fractions, superscripts/subscripts, delimiters, matrices, accents, etc.
+- Screen-reader accessibility.
+- ...
+
+### Which CSS file to import
+
+KaTeX ships several CSS variants in `node_modules/katex/dist/`:
+
+| File | When to use |
+|---|---|
+| `katex.min.css` | **Default.** `font-display: block` — the browser hides text until the KaTeX font loads, then swaps in. Avoids a flash of unstyled text (FOUT) at the cost of a short invisible period. |
+| `katex.css` | Same as above but unminified (useful for debugging). |
+| `katex-swap.min.css` | `font-display: swap` — the browser shows a fallback font immediately and swaps to KaTeX when it loads. Better perceived performance on slow connections; may cause a visible style shift. |
+| `katex-swap.css` | Same as above, unminified. |
+
+Import **one** of them — that's all that's needed. If you're unsure, use `katex.min.css`.
+
+You can also skip the bundled CSS entirely and write your own styles for the KaTeX classes (see below), or import the CSS in a different way (via a CSS bundler `@import`, a `<link>` tag from a CDN, etc.).
+
+### Display math DOM structure
+
+When KaTeX renders a display-math block, the output HTML structure placed into the document is:
+
+```html
+<span class="katex-display">
+  <span class="katex">
+    <!-- MathML for screen readers, visually hidden -->
+    <span class="katex-mathml">…</span>
+    <span class="katex-html" aria-hidden="true">
+      <!-- one or more inline-blocks per line of math -->
+      <span class="base">…</span>
+    </span>
+  </span>
+</span>
+```
+
+KaTeX's default CSS styles these as:
+
+| Selector | CSS | Role |
+|---|---|---|
+| `.katex-display` | `display: block; margin: 1em 0; text-align: center` | Outer block wrapper |
+| `.katex-display > .katex` | `display: block; text-align: center; white-space: nowrap` | Internal block container |
+| `.katex-display > .katex > .katex-html` | `display: block; position: relative` | Visible rendered output |
+| `.katex .base` | `display: inline-block; width: min-content` | Each line of math |
+| `.katex .katex-mathml` | `position: absolute; clip-path: inset(50%)` | Visually hidden, accessibility only |
+
+All three wrapper levels (`.katex-display`, `.katex`, `.katex-html`) are `display: block` and each takes 100% width of its parent. The math content (the `.base` inline-blocks) is centered by `text-align: center` inherited from `.katex`.
+
+### Customizing margins and centering
+
+Since the KaTeX classes are plain CSS, override them directly. To control the display block's outer spacing:
+
+```css
+.katex-display {
+  margin: 1.5em 2rem;
+  text-align: left;
+}
+```
+
+If the default `text-align: center` doesn't reliably center the math in your layout (e.g. inside a flex or grid container), switch `.katex` to flexbox:
+
+```css
+.katex-display > .katex {
+  display: flex;
+  justify-content: center;
+}
+```
+
+This changes `.katex` from `display: block` (full width) to `display: flex` (width shrinks to fit content), and `justify-content: center` centers the visible `.katex-html` inside it.
+
+To adjust the base math font size:
+
+```css
+.katex {
+  font-size: 1.1em;
+}
+```
+
 ## Mermaid
 
 ```sh
