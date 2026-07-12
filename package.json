@@ -1,7 +1,7 @@
 {
   "name": "@opticlm/streamup",
-  "version": "0.2.1",
-  "description": "A simple, headless React streaming markdown renderer",
+  "version": "1.0.0",
+  "description": "A lightweight, headless React streaming markdown renderer",
   "type": "module",
   "types": "dist/index.d.mts",
   "sideEffects": false,
@@ -19,7 +19,11 @@
       "default": "./dist/mermaid/index.mjs"
     }
   },
-  "files": ["dist/**/*.mjs", "dist/**/*.d.mts", "LICENSE"],
+  "files": [
+    "dist/**/*.mjs",
+    "dist/**/*.d.mts",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
@@ -31,7 +35,10 @@
     "format": "biome format --write .",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["markdown", "stream"],
+  "keywords": [
+    "markdown",
+    "stream"
+  ],
   "author": "EFLKumo",
   "license": "MIT",
   "repository": {
@@ -55,8 +62,8 @@
     "hast-util-to-jsx-runtime": "^2.3.6",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
-    "remark-cjk-friendly": "^2.0.1",
-    "remark-cjk-friendly-gfm-strikethrough": "^2.0.1",
+    "remark-cjk-friendly": "^2.3.1",
+    "remark-cjk-friendly-gfm-strikethrough": "^2.3.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "remark-parse": "^11.0.0",
@@ -68,20 +75,20 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
     "@testing-library/react": "^16.3.0",
-    "@types/hast": "^3.0.4",
+    "@types/hast": "^3.0.5",
     "@types/mdast": "^4.0.4",
-    "@types/node": "^25",
-    "@types/react": "^19",
+    "@types/node": "^25.9.5",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19",
     "@types/unist": "^3.0.3",
     "jsdom": "^26.1.0",
-    "katex": "^0.16.22",
-    "mermaid": "^11.6.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "katex": "^0.16.47",
+    "mermaid": "^11.16.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tsdown": "^0.22.4",
     "typescript": "^5.9",
-    "vitest": "^4"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=18.0.0"
