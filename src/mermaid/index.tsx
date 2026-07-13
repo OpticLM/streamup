@@ -26,7 +26,11 @@ export function MermaidRenderer({ code, config }: MermaidRendererProps) {
       .then((mod) => {
         if (cancelled) return
         const mermaid = mod.default
-        mermaid.initialize({ startOnLoad: false, ...config })
+        mermaid.initialize({
+          startOnLoad: false,
+          ...config,
+          suppressErrorRendering: true,
+        })
         return mermaid.render(`mermaid-${id}`, code)
       })
       .then((res) => {
