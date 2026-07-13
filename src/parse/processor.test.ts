@@ -66,3 +66,43 @@ describe('renderBlock', () => {
     expect(render('Price is $5 and $10')).not.toContain('math-inline')
   })
 })
+
+describe('footnotes', () => {
+  it('links a footnote reference to its definition', () => {
+    const html = render('Body[^1].\n\n[^1]: def.')
+    expect(html).toContain('href="#user-content-fn-1"')
+    expect(html).toContain('id="user-content-fn-1"')
+    expect(html).not.toContain('user-content-user-content-fn')
+  })
+
+  it('links a footnote backref to its reference', () => {
+    const html = render('Body[^1].\n\n[^1]: def.')
+    expect(html).toContain('href="#user-content-fnref-1"')
+    expect(html).toContain('id="user-content-fnref-1"')
+  })
+
+  it('resolves every footnote href to a matching id', () => {
+    // Numeric, named, and a repeated reference (produces a fnref-1-2 backref).
+    const md = [
+      'Alpha[^1], beta[^1], gamma[^note].',
+      '',
+      '[^1]: first def.',
+      '[^note]: second def.',
+    ].join('\n')
+    const html = render(md)
+    const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))
+    const fragments = [...html.matchAll(/href="#([^"]+)"/g)].map((m) => m[1])
+    expect(fragments.length).toBeGreaterThan(0)
+    for (const fragment of fragments) {
+      expect(ids.has(fragment), `no id for href #${fragment}`).toBe(true)
+    }
+  })
+
+  it('keeps the user-content- namespacing on the label and raw HTML ids', () => {
+    const html = render('Body[^1].\n\n[^1]: def.\n\n<div id="x">raw</div>')
+    expect(html).toContain('id="user-content-footnote-label"')
+    expect(html).toContain('aria-describedby="user-content-footnote-label"')
+    expect(html).toContain('id="user-content-x"')
+    expect(html).not.toContain('user-content-user-content-')
+  })
+})

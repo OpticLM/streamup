@@ -12,6 +12,7 @@ import remarkRehype from 'remark-rehype'
 import type { PluggableList } from 'unified'
 import { unified } from 'unified'
 import type { StreamupComponents } from '../types.js'
+import { rehypeFixFootnoteIds } from './rehype-fix-footnote-ids.js'
 import { remarkCjkAutolinkBoundary } from './remark-cjk-autolink-boundary.js'
 
 const sanitizeSchema = {
@@ -42,6 +43,7 @@ export function createProcessor(options: ProcessorOptions = {}) {
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeRaw)
     .use(rehypeSanitize, sanitizeSchema)
+    .use(rehypeFixFootnoteIds)
     .use(options.extraRehypePlugins ?? [])
 }
 
