@@ -4,19 +4,54 @@ import type { PluggableList } from 'unified'
 import { splitBlocks } from './parse/blocks.js'
 import type { MdProcessor } from './parse/processor.js'
 import { createProcessor, renderBlock } from './parse/processor.js'
-import type { StreamupProps } from './types.js'
-import { useThrottle } from './useThrottle.js'
+import type { PacingConfig, StreamupProps } from './types.js'
+import type { PacingOptions } from './usePacedStream.js'
+import { usePacedStream } from './usePacedStream.js'
+
+const DEFAULT_PACING = {
+  tickMs: 33,
+  low: 5,
+  high: 50,
+  slowCps: 15,
+  normCps: 30,
+  fastCps: 120,
+  scaleFast: true,
+}
+
+function resolvePacing(
+  pacing: PacingConfig | boolean | undefined,
+  streaming: boolean,
+): PacingOptions {
+  if (pacing === false) return { ...DEFAULT_PACING, tickMs: 0, enabled: false }
+  if (pacing === true) return { ...DEFAULT_PACING, enabled: true }
+  if (pacing === undefined) return { ...DEFAULT_PACING, enabled: streaming }
+  const tickMs = pacing.tickMs ?? DEFAULT_PACING.tickMs
+  return {
+    tickMs,
+    low: pacing.low ?? DEFAULT_PACING.low,
+    high: pacing.high ?? DEFAULT_PACING.high,
+    slowCps: pacing.slowCps ?? DEFAULT_PACING.slowCps,
+    normCps: pacing.normCps ?? DEFAULT_PACING.normCps,
+    fastCps: pacing.fastCps ?? DEFAULT_PACING.fastCps,
+    scaleFast: pacing.scaleFast ?? DEFAULT_PACING.scaleFast,
+    enabled: tickMs > 0,
+  }
+}
 
 export function Streamup({
   children,
   streaming = false,
-  throttleMs = 50,
+  pacing,
   components,
   plugins,
   singleDollarTextMath,
 }: StreamupProps) {
   const markdown = children ?? ''
-  const source = useThrottle(markdown, streaming ? throttleMs : 0)
+  const pacingOptions = useMemo(
+    () => resolvePacing(pacing, streaming),
+    [pacing, streaming],
+  )
+  const source = usePacedStream(markdown, pacingOptions)
 
   const extraRemarkPlugins = useMemo<PluggableList>(
     () => (plugins ?? []).flatMap((p) => p.remarkPlugins ?? []),
@@ -38,8 +73,8 @@ export function Streamup({
   )
 
   const blocks = useMemo(
-    () => splitBlocks(source, processor, streaming),
-    [source, processor, streaming],
+    () => splitBlocks(source, processor, streaming || pacingOptions.enabled),
+    [source, processor, streaming, pacingOptions.enabled],
   )
 
   const cacheRef = useRef({

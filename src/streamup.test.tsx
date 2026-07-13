@@ -244,15 +244,15 @@ describe('Streamup streaming', () => {
     expect(html).not.toContain('<strong>')
   })
 
-  it('renders the latest markdown after a rerender (throttleMs=0)', () => {
+  it('renders the latest markdown after a rerender (pacing=false)', () => {
     const { container, rerender } = render(
-      createElement(Streamup, { streaming: true, throttleMs: 0 }, '# First'),
+      createElement(Streamup, { streaming: true, pacing: false }, '# First'),
     )
     expect(container.querySelector('h1')?.textContent).toBe('First')
     rerender(
       createElement(
         Streamup,
-        { streaming: true, throttleMs: 0 },
+        { streaming: true, pacing: false },
         '# First\n\n**bold**',
       ),
     )
@@ -260,23 +260,23 @@ describe('Streamup streaming', () => {
     expect(container.querySelector('strong')?.textContent).toBe('bold')
   })
 
-  it('catches up to the latest input after rapid sequential updates (throttleMs=0)', () => {
+  it('catches up to the latest input after rapid sequential updates (pacing=false)', () => {
     const { container, rerender } = render(
-      createElement(Streamup, { streaming: true, throttleMs: 0 }, 'a'),
+      createElement(Streamup, { streaming: true, pacing: false }, 'a'),
     )
-    rerender(createElement(Streamup, { streaming: true, throttleMs: 0 }, 'ab'))
-    rerender(createElement(Streamup, { streaming: true, throttleMs: 0 }, 'abc'))
+    rerender(createElement(Streamup, { streaming: true, pacing: false }, 'ab'))
+    rerender(createElement(Streamup, { streaming: true, pacing: false }, 'abc'))
     rerender(
-      createElement(Streamup, { streaming: true, throttleMs: 0 }, 'abcd'),
+      createElement(Streamup, { streaming: true, pacing: false }, 'abcd'),
     )
     expect(container.textContent).toContain('abcd')
   })
 
-  it('preserves DOM identity for settled blocks across chunks (throttleMs=0)', () => {
+  it('preserves DOM identity for settled blocks across chunks (pacing=false)', () => {
     const { container, rerender } = render(
       createElement(
         Streamup,
-        { streaming: true, throttleMs: 0 },
+        { streaming: true, pacing: false },
         '# Title\n\nbody',
       ),
     )
@@ -285,18 +285,18 @@ describe('Streamup streaming', () => {
     rerender(
       createElement(
         Streamup,
-        { streaming: true, throttleMs: 0 },
+        { streaming: true, pacing: false },
         '# Title\n\nbody\n\nmore body',
       ),
     )
     expect(container.querySelector('h1')).toBe(firstH1)
   })
 
-  it('preserves DOM identity for a settled block as the tail moves past it (throttleMs=0)', () => {
+  it('preserves DOM identity for a settled block as the tail moves past it (pacing=false)', () => {
     const { container, rerender } = render(
       createElement(
         Streamup,
-        { streaming: true, throttleMs: 0 },
+        { streaming: true, pacing: false },
         '# Done\n\nsecond',
       ),
     )
@@ -304,41 +304,325 @@ describe('Streamup streaming', () => {
     rerender(
       createElement(
         Streamup,
-        { streaming: true, throttleMs: 0 },
+        { streaming: true, pacing: false },
         '# Done\n\nsecond\n\nthird paragraph',
       ),
     )
     expect(container.querySelector('h1')).toBe(settledH1)
     expect(container.textContent).toContain('third paragraph')
   })
+})
 
-  it('throttles re-renders to the latest value after throttleMs', () => {
+describe('Streamup adaptive pacing', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('reveals content at the NORM rate (low <= buffer < high)', () => {
     vi.useFakeTimers()
     try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 20,
+        fastCps: 40,
+        scaleFast: false,
+      }
       const { container, rerender } = render(
-        createElement(Streamup, { streaming: true, throttleMs: 50 }, '# First'),
+        createElement(Streamup, { streaming: true, pacing }, 'A'),
       )
-      expect(container.querySelector('h1')?.textContent).toBe('First')
       rerender(
         createElement(
           Streamup,
-          { streaming: true, throttleMs: 50 },
-          '# First\n\n**bold**',
+          { streaming: true, pacing },
+          `A${'B'.repeat(20)}`,
         ),
       )
+      // buffer 20 -> NORM, normCps 20, tickMs 100 -> 2 cp/tick
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('ABB')
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('ABBBB')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('slows to 1 char every 2 ticks when the buffer is nearly empty (< low)', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 20,
+        fastCps: 40,
+        scaleFast: false,
+      }
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true, pacing }, 'A'),
+      )
+      // buffer 3 (< low=5) -> SLOW, slowCps 5, tickMs 100 -> 0.5 cp/tick -> 1 char / 2 ticks
+      rerender(createElement(Streamup, { streaming: true, pacing }, 'ABCD'))
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('A') // credit 0.5 -> 0 emitted
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('AB') // credit 1.0 -> 1 emitted
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('AB') // credit 0.5 -> 0 emitted
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('ABC') // credit 1.0 -> 1 emitted
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drains a burst at the FAST rate (buffer >= high)', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 20,
+        fastCps: 40,
+        scaleFast: false,
+      }
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true, pacing }, 'Z'),
+      )
       rerender(
         createElement(
           Streamup,
-          { streaming: true, throttleMs: 50 },
-          '# First\n\n**bold**\n\nmore',
+          { streaming: true, pacing },
+          `Z${'C'.repeat(101)}`,
+        ),
+      )
+      // buffer 101 (>= high=50) -> FAST, fastCps 40, tickMs 100 -> 4 cp/tick
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe(`Z${'C'.repeat(4)}`)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('scaleFast drains a large buffer in bounded time', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 20,
+        fastCps: 40,
+        scaleFast: true,
+      }
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true, pacing }, 'Z'),
+      )
+      rerender(
+        createElement(
+          Streamup,
+          { streaming: true, pacing },
+          `Z${'C'.repeat(501)}`,
+        ),
+      )
+      // buffer 500 -> scale min(10, 500/50)=10 -> 40*10=400 cps -> 40 cp/tick
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe(`Z${'C'.repeat(40)}`)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('flushes remaining content instantly when pacing is disabled', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 20,
+        fastCps: 40,
+        scaleFast: false,
+      }
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true, pacing }, 'A'),
+      )
+      rerender(
+        createElement(
+          Streamup,
+          { streaming: true, pacing },
+          `A${'B'.repeat(20)}`,
         ),
       )
       act(() => {
-        vi.advanceTimersByTime(50)
+        vi.advanceTimersByTime(100)
       })
-      expect(container.querySelector('h1')?.textContent).toBe('First')
-      expect(container.querySelector('strong')?.textContent).toBe('bold')
-      expect(container.textContent).toContain('more')
+      expect(container.textContent).toBe('ABB') // mid-reveal
+      // disable pacing (stream complete) -> snap to full received
+      rerender(
+        createElement(
+          Streamup,
+          { streaming: true, pacing: false },
+          `A${'B'.repeat(20)}`,
+        ),
+      )
+      expect(container.textContent).toBe(`A${'B'.repeat(20)}`)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('flushes the full document when streaming ends with default pacing', () => {
+    vi.useFakeTimers()
+    try {
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true }, 'A'),
+      )
+      rerender(
+        createElement(Streamup, { streaming: true }, `A${'B'.repeat(20)}`),
+      )
+      // default pacing: tickMs 33, normCps 30 -> 0.99 cp/tick -> first tick emits 0
+      act(() => {
+        vi.advanceTimersByTime(33)
+      })
+      expect(container.textContent).toBe('A')
+      // stream ends -> streaming false -> default pacing disables -> flush
+      rerender(
+        createElement(Streamup, { streaming: false }, `A${'B'.repeat(20)}`),
+      )
+      expect(container.textContent).toBe(`A${'B'.repeat(20)}`)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reveals emoji whole, never splitting a surrogate pair', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 10,
+        fastCps: 40,
+        scaleFast: true,
+      }
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true, pacing }, ''),
+      )
+      rerender(createElement(Streamup, { streaming: true, pacing }, 'a😀bcdef'))
+      // normCps 10, tickMs 100 -> 1 cp/tick
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('a')
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('a😀')
+      expect(container.textContent).not.toContain('�')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('clamps displayed when received shrinks below it', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 20,
+        fastCps: 40,
+        scaleFast: true,
+      }
+      const { container, rerender } = render(
+        createElement(
+          Streamup,
+          { streaming: true, pacing },
+          `A${'B'.repeat(10)}`,
+        ),
+      )
+      rerender(
+        createElement(
+          Streamup,
+          { streaming: true, pacing },
+          `A${'B'.repeat(20)}`,
+        ),
+      )
+      // reveal some (NORM 2 cp/tick)
+      act(() => {
+        vi.advanceTimersByTime(300)
+      })
+      // shrink received below displayed
+      rerender(createElement(Streamup, { streaming: true, pacing }, 'AB'))
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.textContent).toBe('AB')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('preserves DOM identity for a settled block while pacing reveals the tail', () => {
+    vi.useFakeTimers()
+    try {
+      const pacing = {
+        tickMs: 100,
+        low: 5,
+        high: 50,
+        slowCps: 5,
+        normCps: 100,
+        fastCps: 40,
+        scaleFast: false,
+      }
+      const { container, rerender } = render(
+        createElement(Streamup, { streaming: true, pacing }, '# Title\n\nbody'),
+      )
+      const title = container.querySelector('h1')
+      expect(title?.textContent).toBe('Title')
+      // grow the trailing paragraph; the h1 must stay the same node
+      rerender(
+        createElement(
+          Streamup,
+          { streaming: true, pacing },
+          '# Title\n\nbody growing',
+        ),
+      )
+      // buffer 8, NORM 100cps -> 10 cp/tick -> emit min(10,8)=8 -> full reveal in 1 tick
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(container.querySelector('h1')).toBe(title)
+      expect(container.textContent).toContain('growing')
     } finally {
       vi.useRealTimers()
     }

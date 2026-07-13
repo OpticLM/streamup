@@ -14,8 +14,8 @@ pnpm add @opticlm/streamup react react-dom
 // Static
 <Streamup>{'# Hello **world**'}</Streamup>
 
-// Streaming: heal incomplete markdown and throttle re-renders to a stable cadence
-<Streamup streaming throttleMs={50}>
+// Streaming: heal incomplete markdown and reveal it with an adaptive typewriter
+<Streamup streaming>
   {'**bold text without a closing'}
 </Streamup>
 ```
@@ -28,11 +28,29 @@ Wrap it in a styled container and the inner HTML is plain semantic elements:
 </div>
 ```
 
-## Stable streaming rate
+## Adaptive typewriter pacing
 
-When `streaming` is on, `Streamup` throttles re-renders to one per `throttleMs` (default 50 ms ≈ 20 fps), always committing the latest input. The output rate is decoupled from how fast the input changes — burst or trickle, the component renders at a steady cadence. Set `throttleMs={0}` to disable throttling and render on every change.
+When `streaming` is on, `Streamup` reveals the document with an adaptive "typewriter" instead of dumping each network chunk as it arrives. Incoming text goes into a buffer decoupled from the UI; a scheduled consumer drains it every `tickMs` (default 33 ms ≈ 30 fps), so the visual output rate stays relatively constant regardless of how bursty or stalled the network is.
 
-Internally the buffer is split into blocks (paragraphs, code, lists, …); only the trailing block is healed on each chunk, and unchanged blocks are cached, so per-chunk cost stays flat as the buffer grows.
+The drain rate adapts to the buffer depth (measured in code points):
+
+| Buffer | Rate | Default | Why |
+|---|---|---|---|
+| `< low` | `slowCps` | 15 cps (≈ 1 char / 2 ticks) | Network stalled — slow down to stretch the remaining tokens and mask the pause |
+| `low`…`high` | `normCps` | 30 cps (≈ 1 cp / tick) | Steady typewriter cadence |
+| `>= high` | `fastCps` | 120 cps (≈ 4 cp / tick) | Burst arrived — speed up to catch up |
+
+With `scaleFast` (default on), `fastCps` is multiplied by `min(10, buffer / high)` so a large backlog drains in bounded time — without it, a fast model delivering 200–600 cps would outpace 120 cps and the UI would lag ever further behind completion. Fractional cp/tick rates (e.g. 0.5 cp/tick) are realized with a credit accumulator, and emission advances by code point so an emoji is never split across frames.
+
+When `streaming` flips to `false` the buffer flushes instantly — the full document is shown at once, healing off. Pass `pacing={false}` (or `tickMs <= 0`) to disable pacing entirely and render every change synchronously. Tune the bucket with an object:
+
+```tsx
+<Streamup streaming pacing={{ tickMs: 16, normCps: 60, fastCps: 200 }}>
+  {markdown}
+</Streamup>
+```
+
+Internally the buffer is split into blocks (paragraphs, code, lists, …); only the trailing block is healed on each tick, and unchanged blocks are cached, so per-tick cost stays flat as the buffer grows. One caveat: documents with footnotes take a single whole-doc block (so the cache can't help) and re-render fully each committing tick — the cost is ~1.5× the old fixed throttle at 30 fps and is configurable via `tickMs`.
 
 ## Code blocks
 
@@ -224,8 +242,8 @@ const plugins = useMemo(() => [rehypeMermaid(), rehypeCodeBlocks()], [])
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `children` | `string` | `''` | Markdown content |
-| `streaming` | `boolean` | `false` | Heal incomplete markdown and throttle re-renders |
-| `throttleMs` | `number` | `50` | Minimum ms between re-renders in streaming mode; `0` disables throttling |
+| `streaming` | `boolean` | `false` | Heal incomplete markdown and enable adaptive typewriter pacing (unless `pacing={false}`) |
+| `pacing` | `PacingConfig \| boolean` | `undefined` | Adaptive typewriter pacing. `false` (or `tickMs <= 0`) disables it; `undefined` follows `streaming`; an object tunes the leaky bucket (`tickMs`, `low`, `high`, `slowCps`, `normCps`, `fastCps`, `scaleFast`) |
 | `components` | `StreamupComponents` | — | Map hast tag names (and custom elements like `code-block`) to React components |
 | `plugins` | `StreamupPlugin[]` | `[]` | Add remark/rehype plugins (e.g. `katex()`) |
 | `singleDollarTextMath` | `boolean` | `false` | Enable `$...$` inline math syntax |

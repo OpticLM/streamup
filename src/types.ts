@@ -35,10 +35,32 @@ export type StreamupComponents = {
     | undefined
 }
 
+export interface PacingConfig {
+  /** Consumer tick interval in ms. Default 33 (~30fps). `<= 0` disables pacing (synchronous passthrough). */
+  tickMs?: number
+  /** Buffer size (code points) below which the consumer slows to mask stalls. Default 5. */
+  low?: number
+  /** Buffer size (code points) at/above which the consumer speeds up to drain bursts. Default 50. */
+  high?: number
+  /** Reveal rate (code points/sec) when buffer < `low`. Default 15 (≈ 1 char / 2 ticks at 30fps). */
+  slowCps?: number
+  /** Reveal rate (code points/sec) when `low` <= buffer < `high`. Default 30 (≈ 1 cp/tick). */
+  normCps?: number
+  /** Base reveal rate (code points/sec) when buffer >= `high`. Default 120 (≈ 4 cp/tick). */
+  fastCps?: number
+  /** Scale `fastCps` up with `buffer / high` (capped at 10x) so large bursts drain in bounded time. Default true. */
+  scaleFast?: boolean
+}
+
 export interface StreamupProps {
   children?: string
   streaming?: boolean
-  throttleMs?: number
+  /**
+   * Adaptive typewriter pacing. `false` (or `tickMs <= 0`) disables it (synchronous
+   * passthrough). `undefined` enables it with defaults when `streaming` is on, and
+   * disables it when `streaming` is off. An object tunes the leaky bucket.
+   */
+  pacing?: PacingConfig | boolean
   components?: StreamupComponents
   plugins?: StreamupPlugin[]
   singleDollarTextMath?: boolean
