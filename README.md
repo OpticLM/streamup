@@ -56,13 +56,13 @@ Internally the buffer is split into blocks (paragraphs, code, lists, …); only 
 
 Inline code is always native `<code>`. Fenced (non-inline) code blocks render as native `<pre><code class="language-…">` by default — that's what shadcn/typeset styles, so leave them alone unless you need something custom.
 
-To take over fenced code blocks, add the `rehypeCodeBlocks` plugin and map the `code-block` element it produces to a component. Your component receives a clean `{ language, code }` contract — no digging through the hast node:
+To take over fenced code blocks, add the `codeBlocks` plugin and map the `code-block` element it produces to a component. Your component receives a clean `{ language, code }` contract — no digging through the hast node:
 
 ```tsx
 import { Streamup } from '@opticlm/streamup'
-import { rehypeCodeBlocks } from '@opticlm/streamup/code-block'
+import { codeBlocks } from '@opticlm/streamup/code-block'
 
-const plugins = useMemo(() => [rehypeCodeBlocks()], [])
+const plugins = useMemo(() => [codeBlocks()], [])
 const components = useMemo(
   () => ({ 'code-block': ({ language, code }) => <MyCodeBlock language={language} code={code} /> }),
   [],
@@ -73,11 +73,11 @@ const components = useMemo(
 </Streamup>
 ```
 
-`rehypeCodeBlocks` turns every fenced `<pre><code class="language-x">` into a `<code-block language="x" code="…">` element; `components['code-block']` renders it. If you use `rehypeCodeBlocks` you **must** map `code-block`. The exported `DefaultCodeBlock` renders native `<pre><code>`, so a custom component can delegate the blocks it doesn't care about:
+`codeBlocks` turns every fenced `<pre><code class="language-x">` into a `<code-block language="x" code="…">` element; `components['code-block']` renders it. If you use `codeBlocks` you **must** map `code-block`. The exported `DefaultCodeBlock` renders native `<pre><code>`, so a custom component can delegate the blocks it doesn't care about:
 
 ```tsx
 import { Streamup } from '@opticlm/streamup'
-import { rehypeCodeBlocks, DefaultCodeBlock } from '@opticlm/streamup/code-block'
+import { DefaultCodeBlock } from '@opticlm/streamup/code-block'
 
 // Highlight only `ts`; leave every other block as native <pre><code>.
 const components = useMemo(
@@ -210,10 +210,10 @@ pnpm add mermaid
 
 ```tsx
 import { Streamup } from '@opticlm/streamup'
-import { MermaidRenderer, rehypeMermaid } from '@opticlm/streamup/mermaid'
+import { MermaidRenderer, mermaid } from '@opticlm/streamup/mermaid'
 
 const config = { theme: 'dark' }
-const plugins = useMemo(() => [rehypeMermaid()], [])
+const plugins = useMemo(() => [mermaid()], [])
 const components = useMemo(
   () => ({ 'mermaid-block': ({ code }) => <MermaidRenderer code={code} config={config} /> }),
   [],
@@ -224,17 +224,17 @@ const components = useMemo(
 </Streamup>
 ```
 
-`rehypeMermaid` turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…">` element; map it via `components['mermaid-block']` (typically to `MermaidRenderer`). Every other fenced language stays native `<pre><code>` for typeset. On a Mermaid syntax error `MermaidRenderer` falls back to the raw source. Or render directly:
+`mermaid` turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…">` element; map it via `components['mermaid-block']` (typically to `MermaidRenderer`). Every other fenced language stays native `<pre><code>` for typeset. On a Mermaid syntax error `MermaidRenderer` falls back to the raw source. Or render directly:
 
 ```tsx
 import { MermaidRenderer } from '@opticlm/streamup/mermaid'
 <MermaidRenderer code="flowchart TD; A-->B" config={{ theme: 'dark' }} />
 ```
 
-To render mermaid *and* customize other languages, list both plugins — `rehypeMermaid` first, then `rehypeCodeBlocks` and map both `mermaid-block` and `code-block`:
+To render mermaid *and* customize other languages, list both plugins — `mermaid` first, then `codeBlocks` and map both `mermaid-block` and `code-block`:
 
 ```tsx
-const plugins = useMemo(() => [rehypeMermaid(), rehypeCodeBlocks()], [])
+const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
 ```
 
 ## Props
@@ -260,7 +260,7 @@ const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugi
 <Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
 ```
 
-When combining `katex()`, `rehypeMermaid()`, and `rehypeCodeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `rehypeCodeBlocks` consumes *every* remaining fenced block, so it must come last.
+When combining `katex()`, `mermaid()`, and `codeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `codeBlocks` consumes *every* remaining fenced block, so it must come last.
 
 ## What's parsed by default
 

@@ -22,7 +22,7 @@ interface Replacement {
  * `<code>` is left untouched. When combining with `katex()` or `rehypeMermaid()`,
  * list those first — this plugin consumes every remaining fenced block.
  */
-export const rehypeCodeBlocksPlugin: Plugin<[], Root, Root> = () => (tree) => {
+export const rehypeCodeBlocks: Plugin<[], Root, Root> = () => (tree) => {
   const replacements: Replacement[] = []
   visit(tree, 'element', (el, index, parent) => {
     if (!parent || index === null || index === undefined) return
@@ -47,9 +47,9 @@ export const rehypeCodeBlocksPlugin: Plugin<[], Root, Root> = () => (tree) => {
   for (const r of replacements) r.siblings.splice(r.index, 1, r.node)
 }
 
-/** `StreamupPlugin` wrapper around {@link rehypeCodeBlocksPlugin}. */
-export function rehypeCodeBlocks(): StreamupPlugin {
-  return { rehypePlugins: [rehypeCodeBlocksPlugin] }
+/** `StreamupPlugin` wrapper around {@link rehypeCodeBlocks}. */
+export function codeBlocks(): StreamupPlugin {
+  return { rehypePlugins: [rehypeCodeBlocks] }
 }
 
 /**

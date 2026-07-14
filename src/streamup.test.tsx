@@ -2,7 +2,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { rehypeCodeBlocks } from './code-block/index.js'
+import { codeBlocks } from './code-block/index.js'
 import type { CodeBlockProps } from './code-block/types.js'
 import { extractLanguage, findCode, textOf } from './parse/processor.js'
 import { Streamup } from './streamup.js'
@@ -81,7 +81,7 @@ describe('Streamup', () => {
       createElement(
         Streamup,
         {
-          plugins: [rehypeCodeBlocks()],
+          plugins: [codeBlocks()],
           components: {
             'code-block': ({ language, code }: CodeBlockProps) =>
               createElement('pre', { 'data-lang': language }, code),
@@ -134,7 +134,7 @@ describe('Streamup', () => {
       createElement(
         Streamup,
         {
-          plugins: [rehypeCodeBlocks()],
+          plugins: [codeBlocks()],
           components: {
             'code-block': ({ language, code }: CodeBlockProps) =>
               createElement('div', { 'data-lang': language || 'none' }, code),

@@ -78,7 +78,7 @@ interface Replacement {
  * `<pre><code>` for typeset. Runs after `rehype-sanitize`. On a Mermaid syntax
  * error, `MermaidRenderer` falls back to the raw source.
  */
-export const rehypeMermaidPlugin: Plugin<[], Root, Root> = () => (tree) => {
+export const rehypeMermaid: Plugin<[], Root, Root> = () => (tree) => {
   const replacements: Replacement[] = []
   visit(tree, 'element', (el, index, parent) => {
     if (!parent || index === null || index === undefined) return
@@ -100,7 +100,7 @@ export const rehypeMermaidPlugin: Plugin<[], Root, Root> = () => (tree) => {
   for (const r of replacements) r.siblings.splice(r.index, 1, r.node)
 }
 
-/** `StreamupPlugin` wrapper around {@link rehypeMermaidPlugin}. */
-export function rehypeMermaid(): StreamupPlugin {
-  return { rehypePlugins: [rehypeMermaidPlugin] }
+/** `StreamupPlugin` wrapper around {@link rehypeMermaid}. */
+export function mermaid(): StreamupPlugin {
+  return { rehypePlugins: [rehypeMermaid] }
 }

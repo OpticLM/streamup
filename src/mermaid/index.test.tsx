@@ -3,7 +3,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Streamup } from '../streamup.js'
-import { MermaidRenderer, rehypeMermaid } from './index.js'
+import { MermaidRenderer, mermaid } from './index.js'
 
 const mermaidBlock = ({ code }: { code: string }) =>
   createElement(MermaidRenderer, { code })
@@ -16,7 +16,7 @@ const mermaidMock = vi.hoisted(() => ({
 }))
 vi.mock('mermaid', () => ({ default: mermaidMock }))
 
-describe('rehypeMermaid', () => {
+describe('mermaid', () => {
   it('routes mermaid flowchart to MermaidRenderer via components (SSR fallback)', () => {
     const md = '```mermaid\nflowchart TD\n    A --> B\n```'
     const html = renderToStaticMarkup(
@@ -24,7 +24,7 @@ describe('rehypeMermaid', () => {
         Streamup,
         {
           streaming: true,
-          plugins: [rehypeMermaid()],
+          plugins: [mermaid()],
           components: { 'mermaid-block': mermaidBlock },
         },
         md,
@@ -32,7 +32,7 @@ describe('rehypeMermaid', () => {
     )
     // SSR: useEffect does not run, so MermaidRenderer returns its <pre><code>
     // fallback. The diagram source is present; the language class is not
-    // (rehypeMermaid consumed the block instead of emitting native code).
+    // (mermaid consumed the block instead of emitting native code).
     expect(html).not.toContain('language-mermaid')
     expect(html).toContain('flowchart')
   })
@@ -45,7 +45,7 @@ describe('rehypeMermaid', () => {
         Streamup,
         {
           streaming: true,
-          plugins: [rehypeMermaid()],
+          plugins: [mermaid()],
           components: { 'mermaid-block': mermaidBlock },
         },
         md,
@@ -63,13 +63,13 @@ describe('rehypeMermaid', () => {
         Streamup,
         {
           streaming: true,
-          plugins: [rehypeMermaid()],
+          plugins: [mermaid()],
           components: { 'mermaid-block': mermaidBlock },
         },
         md,
       ),
     )
-    // rehypeMermaid ignores non-mermaid, so the native <pre><code class="language-js">.
+    // mermaid ignores non-mermaid, so the native <pre><code class="language-js">.
     expect(html).toContain('language-js')
     expect(html).toContain('console.log')
   })

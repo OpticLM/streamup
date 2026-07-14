@@ -2,11 +2,11 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createProcessor, renderBlock } from '../parse/processor.js'
-import { CODE_BLOCK_TAG, DefaultCodeBlock, rehypeCodeBlocks } from '.'
+import { CODE_BLOCK_TAG, codeBlocks, DefaultCodeBlock } from '.'
 import type { CodeBlockProps } from './types.js'
 
 const processor = createProcessor({
-  extraRehypePlugins: rehypeCodeBlocks().rehypePlugins,
+  extraRehypePlugins: codeBlocks().rehypePlugins,
 })
 
 describe('rehypeCodeBlocks', () => {
