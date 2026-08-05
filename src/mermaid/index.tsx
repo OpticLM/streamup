@@ -1,4 +1,4 @@
-import type { ElementContent, Root } from 'hast'
+import type { Element, ElementContent, Root } from 'hast'
 import type { MermaidConfig } from 'mermaid'
 import { useEffect, useId, useState } from 'react'
 import type { Plugin } from 'unified'
@@ -8,12 +8,18 @@ import type { StreamupPlugin } from '../types.js'
 
 export type { MermaidConfig } from 'mermaid'
 
-interface MermaidRendererProps {
+export interface MermaidRendererProps {
   code: string
   config?: MermaidConfig
+  /** Whether the source Markdown fence has been closed. Defaults to `true`. */
+  isClosed?: boolean
 }
 
-export function MermaidRenderer({ code, config }: MermaidRendererProps) {
+export function MermaidRenderer({
+  code,
+  config,
+  isClosed = true,
+}: MermaidRendererProps) {
   const id = useId().replace(/:/g, '_')
   const [svg, setSvg] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -22,6 +28,7 @@ export function MermaidRenderer({ code, config }: MermaidRendererProps) {
     let cancelled = false
     setSvg(null)
     setFailed(false)
+    if (!isClosed) return
     import('mermaid')
       .then((mod) => {
         if (cancelled) return
@@ -42,9 +49,9 @@ export function MermaidRenderer({ code, config }: MermaidRendererProps) {
     return () => {
       cancelled = true
     }
-  }, [code, id, config])
+  }, [code, id, config, isClosed])
 
-  if (failed || svg === null) {
+  if (!isClosed || failed || svg === null) {
     return (
       <pre>
         <code>{code}</code>
@@ -65,6 +72,24 @@ export const MERMAID_BLOCK_TAG = 'mermaid-block'
 const isMermaid = (classes: unknown): boolean =>
   Array.isArray(classes) && classes.includes('language-mermaid')
 
+function isFenceClosed(source: string, node: Element): boolean {
+  const start = node.position?.start.offset
+  const end = node.position?.end.offset
+  if (start === undefined || end === undefined) return true
+
+  const markdown = source.slice(start, end)
+  const opening = /^ {0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)/.exec(markdown)
+  const fence = opening?.[1]
+  if (!fence) return true
+
+  const fenceCharacter = fence[0]
+  const closing = new RegExp(
+    `^ {0,3}${fenceCharacter}{${fence.length},}[\\t ]*$`,
+  )
+  const lines = markdown.split(/\r?\n/)
+  return closing.test(lines[lines.length - 1] ?? '')
+}
+
 interface Replacement {
   siblings: ElementContent[]
   index: number
@@ -78,7 +103,8 @@ interface Replacement {
  * `<pre><code>` for typeset. Runs after `rehype-sanitize`. On a Mermaid syntax
  * error, `MermaidRenderer` falls back to the raw source.
  */
-export const rehypeMermaid: Plugin<[], Root, Root> = () => (tree) => {
+export const rehypeMermaid: Plugin<[], Root, Root> = () => (tree, file) => {
+  const source = String(file.value)
   const replacements: Replacement[] = []
   visit(tree, 'element', (el, index, parent) => {
     if (!parent || index === null || index === undefined) return
@@ -91,7 +117,7 @@ export const rehypeMermaid: Plugin<[], Root, Root> = () => (tree) => {
       node: {
         type: 'element',
         tagName: MERMAID_BLOCK_TAG,
-        properties: { code: textOf(code) },
+        properties: { code: textOf(code), isClosed: isFenceClosed(source, el) },
         children: [],
       },
     })

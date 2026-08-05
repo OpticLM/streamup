@@ -3,10 +3,11 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Streamup } from '../streamup.js'
+import type { MermaidRendererProps } from './index.js'
 import { MermaidRenderer, mermaid } from './index.js'
 
-const mermaidBlock = ({ code }: { code: string }) =>
-  createElement(MermaidRenderer, { code })
+const mermaidBlock = ({ code, isClosed }: MermaidRendererProps) =>
+  createElement(MermaidRenderer, { code, isClosed })
 
 // Mock `mermaid` so we can drive the render promise and assert how
 // MermaidRenderer initializes it, without pulling d3/SVG layout into jsdom.
@@ -54,6 +55,33 @@ describe('mermaid', () => {
     expect(html).not.toContain('language-mermaid')
     expect(html).toContain('pie title Pets')
     expect(html).toContain('&quot;Dogs&quot;')
+  })
+
+  it('marks whether the mermaid fence is closed', () => {
+    const renderFenceState = (md: string) =>
+      renderToStaticMarkup(
+        createElement(
+          Streamup,
+          {
+            streaming: true,
+            plugins: [mermaid()],
+            components: {
+              'mermaid-block': ({ isClosed }: MermaidRendererProps) =>
+                createElement('div', {
+                  'data-closed': String(isClosed),
+                }),
+            },
+          },
+          md,
+        ),
+      )
+
+    expect(renderFenceState('```mermaid\nflowchart TD\n    A --> B')).toContain(
+      'data-closed="false"',
+    )
+    expect(
+      renderFenceState('```mermaid\nflowchart TD\n    A --> B\n```'),
+    ).toContain('data-closed="true"')
   })
 
   it('leaves non-mermaid code blocks as native <pre><code>', () => {
@@ -129,5 +157,20 @@ describe('MermaidRenderer (client effect)', () => {
 
     expect(container.querySelector('svg.ok')).not.toBeNull()
     expect(container.querySelector('pre')).toBeNull()
+  })
+
+  it('does not attempt to render an unclosed mermaid block', async () => {
+    const code = 'flowchart TD\n  A --> B'
+    const { container } = render(
+      createElement(MermaidRenderer, { code, isClosed: false }),
+    )
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    expect(mermaidMock.initialize).not.toHaveBeenCalled()
+    expect(mermaidMock.render).not.toHaveBeenCalled()
+    expect(container.querySelector('pre')).not.toBeNull()
+    expect(container.textContent).toContain('flowchart')
   })
 })

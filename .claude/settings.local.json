@@ -6,5 +6,6 @@
       "Bash(pnpm build:*)",
       "Bash(pnpm test:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": ["context7", "docs-rs"]
 }

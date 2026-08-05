@@ -215,7 +215,11 @@ import { MermaidRenderer, mermaid } from '@opticlm/streamup/mermaid'
 const config = { theme: 'dark' }
 const plugins = useMemo(() => [mermaid()], [])
 const components = useMemo(
-  () => ({ 'mermaid-block': ({ code }) => <MermaidRenderer code={code} config={config} /> }),
+  () => ({
+    'mermaid-block': ({ code, isClosed }) => (
+      <MermaidRenderer code={code} config={config} isClosed={isClosed} />
+    ),
+  }),
   [],
 )
 
@@ -224,7 +228,7 @@ const components = useMemo(
 </Streamup>
 ```
 
-`mermaid` turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…">` element; map it via `components['mermaid-block']` (typically to `MermaidRenderer`). Every other fenced language stays native `<pre><code>` for typeset. On a Mermaid syntax error `MermaidRenderer` falls back to the raw source. Or render directly:
+`mermaid` turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…" isClosed={…}>` element; map it via `components['mermaid-block']` (typically to `MermaidRenderer`). `isClosed` remains false until the closing fence arrives, and `MermaidRenderer` waits for it before rendering. Every other fenced language stays native `<pre><code>` for typeset. On a Mermaid syntax error `MermaidRenderer` falls back to the raw source. Or render directly:
 
 ```tsx
 import { MermaidRenderer } from '@opticlm/streamup/mermaid'
