@@ -268,11 +268,76 @@ When combining `katex()`, `mermaid()`, and `codeBlocks()`, list them in that ord
 
 ## What's parsed by default
 
-GFM (tables, strikethrough, task lists, autolinks, footnotes), math (block `$$…$$` by default), raw HTML (sanitized), and correct emphasis/strikethrough/autolinks for CJK text.
+GFM, math, raw HTML (sanitized), and correct emphasis/strikethrough/autolinks for CJK text.
 
-## Styling GFM task lists
+## Responsive tables
 
-GFM task lists use remark-gfm's class names — `ul.contains-task-list` and `li.task-list-item` (containing `<input type="checkbox" disabled>`).
+Streamup emits plain `<table>`, which [shadcn/typeset](https://ui.shadcn.com/docs/typeset) styles as a real table that wraps to fit. To scroll a wide table horizontally instead, typeset wants it wrapped in a `typeset-scroll` container:
+
+```html
+<div class="typeset-scroll">
+  <table>...</table>
+</div>
+```
+
+A small rehype plugin does that for every table. Add `unist-util-visit` (`pnpm add unist-util-visit`) and write:
+
+```ts
+// rehype-scroll-tables.ts
+import type { Root } from 'hast'
+import type { Plugin } from 'unified'
+import { SKIP, visit } from 'unist-util-visit'
+
+export const rehypeScrollTables: Plugin<[], Root> = () => (tree) => {
+  visit(tree, 'element', (node, index, parent) => {
+    if (node.tagName !== 'table' || !parent || index === undefined) return
+    parent.children[index] = {
+      type: 'element',
+      tagName: 'div',
+      properties: { className: ['typeset-scroll'] },
+      children: [node],
+    }
+    // Continue at the next sibling — don't descend into the wrapper we just made.
+    return SKIP
+  })
+}
+```
+
+Returning `SKIP` is what keeps this from looping forever: without it `visit` would walk into the new `<div>`, find the same `<table>`, and wrap it again.
+
+Then pass it through `plugins`:
+
+```tsx
+import { Streamup } from '@opticlm/streamup'
+import { rehypeScrollTables } from './rehype-scroll-tables'
+
+const plugins = useMemo(() => [{ rehypePlugins: [rehypeScrollTables] }], [])
+
+<Streamup streaming plugins={plugins}>{markdown}</Streamup>
+```
+
+Plugins from `plugins` run *after* the built-in `rehype-sanitize`, so the wrapper `<div>` is never stripped.
+
+It works for any wide block, not just tables, so that you could widen the condition to wrap `pre` too:
+
+```ts
+if (node.tagName !== 'table' && node.tagName !== 'pre') return
+```
+
+If you'd rather not add a plugin, override the element instead:
+
+```tsx
+const components = useMemo(
+  () => ({
+    table: ({ node, ...props }) => (
+      <div className="typeset-scroll">
+        <table {...props} />
+      </div>
+    ),
+  }),
+  [],
+)
+```
 
 ## License
 
