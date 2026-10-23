@@ -1,6 +1,6 @@
 {
   "name": "@opticlm/streamup",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "A lightweight, headless React streaming markdown renderer",
   "type": "module",
   "types": "dist/index.d.mts",
