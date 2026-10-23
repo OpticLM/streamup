@@ -3,6 +3,7 @@ import type * as React from 'react'
 import type { ComponentType } from 'react'
 import type { PluggableList } from 'unified'
 import type { CodeBlockProps } from './code-block/types.js'
+import type { FootnoteMode, FootnoteRefProps } from './footnote/types.js'
 
 export interface StreamupPlugin {
   remarkPlugins?: PluggableList
@@ -29,6 +30,7 @@ export type StreamupComponents = {
     | keyof React.JSX.IntrinsicElements
 } & {
   'code-block'?: ComponentType<CodeBlockProps>
+  'footnote-ref'?: ComponentType<FootnoteRefProps>
   [tagName: string]:
     | AnyComponent
     | keyof React.JSX.IntrinsicElements
@@ -64,4 +66,10 @@ export interface StreamupProps {
   components?: StreamupComponents
   plugins?: StreamupPlugin[]
   singleDollarTextMath?: boolean
+  /**
+   * `'section'` (default) renders GFM footnotes. `'inline'` renders each
+   * reference through `components['footnote-ref']` with its footnote's
+   * content, keeping the body's blocks independent of the footnote section.
+   */
+  footnotes?: FootnoteMode
 }

@@ -50,7 +50,7 @@ When `streaming` flips to `false` the buffer flushes instantly — the full docu
 </Streamup>
 ```
 
-Internally the buffer is split into blocks (paragraphs, code, lists, …); only the trailing block is healed on each tick, and unchanged blocks are cached, so per-tick cost stays flat as the buffer grows. One caveat: documents with footnotes take a single whole-doc block (so the cache can't help) and re-render fully each committing tick — the cost is ~1.5× the old fixed throttle at 30 fps and is configurable via `tickMs`.
+Internally the buffer is split into blocks (paragraphs, code, lists, …); only the trailing block is healed on each tick, and unchanged blocks are cached, so per-tick cost stays flat as the buffer grows. One caveat: with the default footnote mode, documents with footnotes take a single whole-doc block (so the cache can't help) and re-render fully each committing tick — the cost is ~1.5× the old fixed throttle at 30 fps and is configurable via `tickMs`. [Inline footnotes](#footnotes) keep the blocks split.
 
 ## Code blocks
 
@@ -241,6 +241,37 @@ To render mermaid *and* customize other languages, list both plugins — `mermai
 const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
 ```
 
+## Footnotes
+
+By default footnotes render the GFM way: numbered references linking to a `<section data-footnotes>` at the end of the document. Linking needs the whole document in one tree, so once a footnote appears the document renders as a single block.
+
+`footnotes="inline"` drops that section and renders every reference through your `footnote-ref` component, which receives the footnote's content — for a tooltip, a popover, a sidenote:
+
+```tsx
+import type { FootnoteRefProps } from '@opticlm/streamup'
+
+const components = useMemo(
+  () => ({
+    'footnote-ref': ({ label, children }: FootnoteRefProps) => (
+      <Popover content={children ?? 'Loading…'}>
+        <sup>{label}</sup>
+      </Popover>
+    ),
+  }),
+  [],
+)
+
+<Streamup streaming footnotes="inline" components={components}>
+  {markdown}
+</Streamup>
+```
+
+`label` is the label as written (`note` for `[^note]`). `children` is the rendered footnote content, `undefined` until its definition has streamed in — or for good, if the document never defines the label. The content is block-level (a definition renders as `<p>…</p>`) while the reference sits inside a paragraph, so render it where blocks are allowed, such as a popover portal, rather than straight into the text. In inline mode you **must** map `footnote-ref`.
+
+Inline mode keeps streaming cheap. Every `[^label]` parses as a reference on its own, so the body splits into blocks as usual and never re-renders for a footnote. The definitions feed a footnote store, and each reference subscribes to its own footnote. While the footnote section streams in, the definition being written is left alone until the stream moves past it (or ends); every earlier definition updates only when its content differs from the store's. In an append-only stream, each reference therefore re-renders once, when its footnote is complete. An unfinished `[^label` at the end of the stream is held back instead of flashing as text.
+
+Only top-level definitions are picked up; one nested in a container such as a blockquote is dropped in inline mode.
+
 ## Props
 
 | Prop | Type | Default | Description |
@@ -251,6 +282,7 @@ const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
 | `components` | `StreamupComponents` | — | Map hast tag names (and custom elements like `code-block`) to React components |
 | `plugins` | `StreamupPlugin[]` | `[]` | Add remark/rehype plugins (e.g. `katex()`) |
 | `singleDollarTextMath` | `boolean` | `false` | Enable `$...$` inline math syntax |
+| `footnotes` | `'section' \| 'inline'` | `'section'` | Render footnotes as a trailing GFM section, or [inline](#footnotes) through `components['footnote-ref']` |
 
 ## Plugins
 

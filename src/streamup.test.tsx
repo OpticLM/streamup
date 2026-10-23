@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { codeBlocks } from './code-block/index.js'
 import type { CodeBlockProps } from './code-block/types.js'
+import type { FootnoteRefProps } from './footnote/types.js'
 import { extractLanguage, findCode, textOf } from './parse/processor.js'
 import { Streamup } from './streamup.js'
 
@@ -623,6 +624,115 @@ describe('Streamup adaptive pacing', () => {
       })
       expect(container.querySelector('h1')).toBe(title)
       expect(container.textContent).toContain('growing')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('Streamup inline footnotes', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const Note = ({ label, children }: FootnoteRefProps) =>
+    createElement('span', { 'data-note': label }, children ?? '?')
+  const inline = { footnotes: 'inline', components: { 'footnote-ref': Note } }
+  const html = (md: string) =>
+    renderToStaticMarkup(createElement(Streamup, inline, md))
+
+  /** A `footnote-ref` that logs every render that carries content. */
+  function recordNotes() {
+    const log: [label: string, content: string][] = []
+    const RecordedNote = ({ label, children }: FootnoteRefProps) => {
+      if (children !== undefined)
+        log.push([label, renderToStaticMarkup(children)])
+      return createElement('sup', null, label)
+    }
+    return { log, components: { 'footnote-ref': RecordedNote } }
+  }
+
+  it('renders each reference with its footnote content, and no section', () => {
+    expect(html('Body[^1].\n\n[^1]: The **def**.')).toBe(
+      '<p>Body<span data-note="1"><p>The <strong>def</strong>.</p></span>.</p>',
+    )
+  })
+
+  it('renders a reference to an undefined footnote without content', () => {
+    expect(html('Body[^1].')).toBe('<p>Body<span data-note="1">?</span>.</p>')
+  })
+
+  it('renders references inside footnote content', () => {
+    expect(html('A[^1]\n\n[^1]: See[^2].\n\n[^2]: Two.')).toBe(
+      '<p>A<span data-note="1"><p>See<span data-note="2"><p>Two.</p></span>.</p></span></p>',
+    )
+  })
+
+  it('does not expand a footnote inside itself', () => {
+    expect(html('A[^1]\n\n[^1]: See[^1].')).toBe(
+      '<p>A<span data-note="1"><p>See<span data-note="1">?</span>.</p></span></p>',
+    )
+  })
+
+  it('streams the footnote section without touching the body, settling each footnote once', () => {
+    const md = 'Alpha[^1].\n\nBeta[^2].\n\n[^1]: One.\n\n[^2]: Two.'
+    const { log, components } = recordNotes()
+    const props = {
+      streaming: true,
+      pacing: false,
+      footnotes: 'inline',
+      components,
+    } as const
+    const bodyEnd = md.indexOf('[^1]:')
+    const { container, rerender } = render(
+      createElement(Streamup, props, md.slice(0, bodyEnd)),
+    )
+    const body = [...container.children]
+    for (let end = bodyEnd + 1; end <= md.length; end++) {
+      rerender(createElement(Streamup, props, md.slice(0, end)))
+    }
+    // [^2] is still being written: it waits for the stream to end.
+    expect(log).toEqual([['1', '<p>One.</p>']])
+    expect([...container.children]).toEqual(body)
+
+    rerender(createElement(Streamup, { ...props, streaming: false }, md))
+    expect(log).toEqual([
+      ['1', '<p>One.</p>'],
+      ['2', '<p>Two.</p>'],
+    ])
+    expect([...container.children]).toEqual(body)
+  })
+
+  it('never shows pending footnote syntax while streaming', () => {
+    const md = 'Claim[^1] and more[^note].\n\n[^1]: One.\n\n[^note]: Two.'
+    const { components } = recordNotes()
+    const props = {
+      streaming: true,
+      pacing: false,
+      footnotes: 'inline',
+      components,
+    } as const
+    const { container, rerender } = render(createElement(Streamup, props, ''))
+    for (let end = 1; end <= md.length; end++) {
+      rerender(createElement(Streamup, props, md.slice(0, end)))
+      expect(container.textContent).not.toMatch(/\[\^|incomplete-link/)
+      expect(container.childElementCount).toBe(1)
+    }
+  })
+
+  it('settles the last footnote once pacing has revealed the whole document', () => {
+    vi.useFakeTimers()
+    try {
+      const { log, components } = recordNotes()
+      const pacing = { tickMs: 100, normCps: 1000, scaleFast: false }
+      const props = { pacing, footnotes: 'inline', components } as const
+      const { rerender } = render(createElement(Streamup, props, 'A'))
+      rerender(createElement(Streamup, props, 'A[^1].\n\n[^1]: One.'))
+      expect(log).toEqual([])
+      act(() => {
+        vi.advanceTimersByTime(100)
+      })
+      expect(log).toEqual([['1', '<p>One.</p>']])
     } finally {
       vi.useRealTimers()
     }
