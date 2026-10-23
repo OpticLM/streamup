@@ -57,6 +57,9 @@
   "dependencies": {
     "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
+    "micromark-util-character": "^2.1.1",
+    "micromark-util-normalize-identifier": "^2.0.1",
+    "micromark-util-symbol": "^2.0.1",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-cjk-friendly": "^2.3.1",
@@ -81,6 +84,7 @@
     "jsdom": "^30.0.1",
     "katex": "^0.18.4",
     "mermaid": "^11.17.2",
+    "micromark-util-types": "^2.0.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tsdown": "^0.22.14",

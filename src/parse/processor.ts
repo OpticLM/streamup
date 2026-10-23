@@ -11,6 +11,9 @@ import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import type { PluggableList } from 'unified'
 import { unified } from 'unified'
+import { rehypeInlineFootnotes } from '../footnote/rehype-inline-footnotes.js'
+import { remarkOrphanFootnoteRefs } from '../footnote/remark-orphan-footnote-refs.js'
+import type { FootnoteMode } from '../footnote/types.js'
 import type { StreamupComponents } from '../types.js'
 import { rehypeFixFootnoteIds } from './rehype-fix-footnote-ids.js'
 import { remarkCjkAutolinkBoundary } from './remark-cjk-autolink-boundary.js'
@@ -27,13 +30,16 @@ export interface ProcessorOptions {
   extraRemarkPlugins?: PluggableList
   extraRehypePlugins?: PluggableList
   singleDollarTextMath?: boolean
+  footnotes?: FootnoteMode
 }
 
 export function createProcessor(options: ProcessorOptions = {}) {
+  const inlineFootnotes = options.footnotes === 'inline'
   return unified()
     .use(remarkParse)
     .use(remarkCjkFriendly)
     .use(remarkGfm)
+    .use(inlineFootnotes ? [remarkOrphanFootnoteRefs] : [])
     .use(remarkCjkAutolinkBoundary)
     .use(remarkCjkFriendlyGfmStrikethrough)
     .use(remarkMath, {
@@ -44,6 +50,7 @@ export function createProcessor(options: ProcessorOptions = {}) {
     .use(rehypeRaw)
     .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeFixFootnoteIds)
+    .use(inlineFootnotes ? [rehypeInlineFootnotes] : [])
     .use(options.extraRehypePlugins ?? [])
 }
 
