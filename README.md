@@ -211,13 +211,17 @@ To adjust the base math font size:
 
 ## Mermaid
 
+The `mermaid()` plugin turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…" isClosed={…}>` element and leaves every other fenced language as native `<pre><code>` for typeset. It only finds the diagram; whatever you map to `components['mermaid-block']` draws it. Streamup ships two renderers, [Mermaid.js](#mermaidjs) and [Pele](#pele). `isClosed` is false until the closing fence has arrived.
+
+### Mermaid.js
+
 ```sh
 pnpm add mermaid
 ```
 
 ````tsx
-import { Streamup } from '@opticlm/streamup'
-import { MermaidRenderer, mermaid } from '@opticlm/streamup/mermaid'
+import { Streamup, mermaid } from '@opticlm/streamup'
+import { MermaidRenderer } from '@opticlm/streamup/mermaid'
 
 const config = { theme: 'dark' }
 const plugins = useMemo(() => [mermaid()], [])
@@ -235,56 +239,49 @@ const components = useMemo(
 </Streamup>
 ````
 
-`mermaid` turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…" isClosed={…}>` element; map it via `components['mermaid-block']` (typically to `MermaidRenderer`). `isClosed` remains false until the closing fence arrives, and `MermaidRenderer` waits for it before rendering. Every other fenced language stays native `<pre><code>` for typeset. On a Mermaid syntax error `MermaidRenderer` falls back to the raw source. Or render directly:
+`MermaidRenderer` waits for the closing fence before rendering, and on a Mermaid syntax error it falls back to the raw source. Or render directly:
 
 ```tsx
 import { MermaidRenderer } from '@opticlm/streamup/mermaid'
 ;<MermaidRenderer code="flowchart TD; A-->B" config={{ theme: 'dark' }} />
 ```
 
-To render mermaid _and_ customize other languages, list both plugins — `mermaid` first, then `codeBlocks` and map both `mermaid-block` and `code-block`:
+### Pele
 
-```tsx
-const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
-```
-
-## Pele
-
-[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. It is an alternative to `mermaid` and takes the same ` ```mermaid ` fences. Use `pele()` _instead of_ `mermaid()`: both claim those fences, so whichever comes first wins.
+[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. It reads the same fences, so the plugin stays `mermaid()` and only the renderer you map changes:
 
 ```sh
 pnpm add pele
 ```
 
 ````tsx
-import { Streamup } from '@opticlm/streamup'
-import { PeleRenderer, pele } from '@opticlm/streamup/pele'
+import { Streamup, mermaid } from '@opticlm/streamup'
+import { PeleRenderer } from '@opticlm/streamup/pele'
 
-const plugins = useMemo(() => [pele()], [])
-const components = useMemo(
-  () => ({
-    'pele-block': ({ code, isClosed }) => (
-      <PeleRenderer code={code} isClosed={isClosed} />
-    ),
-  }),
-  [],
-)
+const plugins = useMemo(() => [mermaid()], [])
+const components = useMemo(() => ({ 'mermaid-block': PeleRenderer }), [])
 
 <Streamup streaming plugins={plugins} components={components}>
   {'```mermaid\nflowchart TD\n  A --> B\n```'}
 </Streamup>
 ````
 
-`pele` turns ` ```mermaid ` fenced blocks into a `<pele-block code="…" isClosed={…}>` element; map it via `components['pele-block']` (typically to `PeleRenderer`). Every other fenced language stays native `<pre><code>` for typeset.
-
-Diagrams are drawn _while they stream_. Until the closing fence arrives (`isClosed` is false), source that does not parse yet because it is cut off mid-statement keeps the previous drawing on screen, or the source itself if nothing has been drawn. Once the fence closes the source is final, so if Pele still cannot render it (a syntax error, an unsupported diagram type, a size limit) `PeleRenderer` shows the raw source. Rendering happens on the client: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
+Diagrams are drawn _while they stream_. Until the closing fence arrives, source that does not parse yet keeps the previous drawing on screen (or the source itself, if nothing has been drawn). Once the fence closes, source Pele still cannot render (a syntax error, an unsupported diagram type, a size limit) is shown as code. Rendering is client-side: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
 
 ```tsx
 import { PeleRenderer } from '@opticlm/streamup/pele'
 ;<PeleRenderer code="flowchart TD; A-->B" options={{ fontSize: 14 }} />
 ```
 
-`options` takes any of [Pele's render options](https://pele.run/api). Memoize it if you can, since a new object re-renders the diagram. Each diagram gets its own `idPrefix` so several can share a page without clashing SVG ids; set `idPrefix` in `options` to choose your own.
+`options` takes any of [Pele's render options](https://pele.run/api). To pass it while mapping, wrap the renderer:
+
+```tsx
+'mermaid-block': ({ code, isClosed }) => (
+  <PeleRenderer code={code} isClosed={isClosed} options={options} />
+)
+```
+
+Memoize `options` if you can, since a new object re-renders the diagram. Each diagram gets its own `idPrefix` so several can share a page without clashing SVG ids; set `idPrefix` in `options` to choose your own.
 
 Pele draws with CSS variables instead of a `theme` option. Set them on `.pele` or any ancestor, and they apply without re-rendering ([all variables](https://pele.run/theming)):
 
@@ -305,7 +302,15 @@ Pele draws with CSS variables instead of a `theme` option. Set them on `.pele` o
 }
 ```
 
-Pele's `package.json` declares `engines.node >= 20`. Combining it with other plugins works as in the [Mermaid](#mermaid) section: list `pele()` before `codeBlocks()` and map `pele-block` as well as `code-block`.
+Pele's `package.json` declares `engines.node >= 20`.
+
+### With code blocks
+
+To draw diagrams _and_ customize other languages, list both plugins — `mermaid` first, then `codeBlocks` — and map both `mermaid-block` and `code-block`:
+
+```tsx
+const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
+```
 
 ## Footnotes
 
@@ -362,7 +367,7 @@ const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugi
 <Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
 ```
 
-When combining `katex()`, `mermaid()` (or `pele()`), and `codeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
+When combining `katex()`, `mermaid()`, and `codeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
 
 ## What's parsed by default
 

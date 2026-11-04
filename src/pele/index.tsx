@@ -1,9 +1,5 @@
-import type { Root } from 'hast'
 import type { RenderOptions } from 'pele'
 import { useEffect, useId, useState } from 'react'
-import type { Plugin } from 'unified'
-import { fencedBlockPlugin } from '../parse/fenced-block.js'
-import type { StreamupPlugin } from '../types.js'
 
 export type { RenderOptions as PeleOptions } from 'pele'
 
@@ -65,25 +61,4 @@ export function PeleRenderer({
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
-}
-
-export const PELE_BLOCK_TAG = 'pele-block'
-
-/**
- * Rehype plugin that turns ` ```mermaid ` fenced blocks into a custom
- * `<pele-block code="…" isClosed={…}>` element. Map it via
- * `components['pele-block']` (typically to `<PeleRenderer>`). Other fenced
- * languages stay native `<pre><code>`. Runs after `rehype-sanitize`. When Pele
- * cannot render a diagram, `PeleRenderer` falls back to the raw source.
- *
- * It claims the same fences as `mermaid()`, so use one or the other.
- */
-export const rehypePele: Plugin<[], Root, Root> = fencedBlockPlugin(
-  'mermaid',
-  PELE_BLOCK_TAG,
-)
-
-/** `StreamupPlugin` wrapper around {@link rehypePele}. */
-export function pele(): StreamupPlugin {
-  return { rehypePlugins: [rehypePele] }
 }

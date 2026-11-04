@@ -1,9 +1,5 @@
-import type { Root } from 'hast'
 import type { MermaidConfig } from 'mermaid'
 import { useEffect, useId, useState } from 'react'
-import type { Plugin } from 'unified'
-import { fencedBlockPlugin } from '../parse/fenced-block.js'
-import type { StreamupPlugin } from '../types.js'
 
 export type { MermaidConfig } from 'mermaid'
 
@@ -64,23 +60,4 @@ export function MermaidRenderer({
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
-}
-
-export const MERMAID_BLOCK_TAG = 'mermaid-block'
-
-/**
- * Rehype plugin that turns ` ```mermaid ` fenced blocks into a custom
- * `<mermaid-block code="…">` element. Map it via `components['mermaid-block']`
- * (typically to `<MermaidRenderer>`). Non-mermaid code stays native
- * `<pre><code>` for typeset. Runs after `rehype-sanitize`. On a Mermaid syntax
- * error, `MermaidRenderer` falls back to the raw source.
- */
-export const rehypeMermaid: Plugin<[], Root, Root> = fencedBlockPlugin(
-  'mermaid',
-  MERMAID_BLOCK_TAG,
-)
-
-/** `StreamupPlugin` wrapper around {@link rehypeMermaid}. */
-export function mermaid(): StreamupPlugin {
-  return { rehypePlugins: [rehypeMermaid] }
 }

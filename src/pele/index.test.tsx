@@ -2,29 +2,14 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { mermaid } from '../parse/mermaid-block.js'
 import { Streamup } from '../streamup.js'
-import type { PeleRendererProps } from './index.js'
-import { PELE_BLOCK_TAG, PeleRenderer, pele } from './index.js'
+import { PeleRenderer } from './index.js'
 
 // These tests run the real Pele: it is synchronous and needs no DOM.
 const FLOWCHART = 'flowchart TD\n  A --> B'
 // A syntax error: Pele throws a `PeleError`.
 const INVALID = 'flowchart TD\n  A -->'
-
-const peleBlock = ({ code, isClosed }: PeleRendererProps) =>
-  createElement(PeleRenderer, { code, isClosed })
-
-const streamupHtml = (
-  md: string,
-  components = { [PELE_BLOCK_TAG]: peleBlock },
-) =>
-  renderToStaticMarkup(
-    createElement(
-      Streamup,
-      { streaming: true, plugins: [pele()], components },
-      md,
-    ),
-  )
 
 // Load Pele up front so "nothing was rendered" checks below only have to wait
 // out a render, not a first-time module load.
@@ -35,69 +20,6 @@ beforeAll(async () => {
 afterEach(cleanup)
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100))
-
-describe('pele', () => {
-  it('routes mermaid fences to PeleRenderer via components (SSR fallback)', () => {
-    const html = streamupHtml('```mermaid\nflowchart TD\n    A --> B\n```')
-    // SSR: effects do not run, so PeleRenderer shows its <pre><code> fallback.
-    // The block was consumed, so the language class is gone.
-    expect(html).not.toContain('language-mermaid')
-    expect(html).toContain('flowchart')
-  })
-
-  it('emits <pele-block>, not <mermaid-block>', () => {
-    const html = streamupHtml(
-      '```mermaid\npie title Pets\n    "Dogs" : 386\n```',
-      {
-        [PELE_BLOCK_TAG]: ({ code }: PeleRendererProps) =>
-          createElement('div', { 'data-tag': 'pele' }, code),
-      },
-    )
-    expect(html).toContain('data-tag="pele"')
-    expect(html).toContain('pie title Pets')
-  })
-
-  it('marks whether the mermaid fence is closed', () => {
-    const state = (md: string) =>
-      streamupHtml(md, {
-        [PELE_BLOCK_TAG]: ({ isClosed }: PeleRendererProps) =>
-          createElement('div', { 'data-closed': String(isClosed) }),
-      })
-
-    expect(state('```mermaid\nflowchart TD\n    A --> B')).toContain(
-      'data-closed="false"',
-    )
-    expect(state('```mermaid\nflowchart TD\n    A --> B\n```')).toContain(
-      'data-closed="true"',
-    )
-  })
-
-  it('replaces every mermaid fence in place, wherever it sits', () => {
-    const md = [
-      '```mermaid\nflowchart TD\n  A --> B\n```',
-      '```mermaid\npie title Pets\n  "Dogs" : 1\n```',
-      '```js\nconst kept = true\n```',
-      '> ```mermaid\n> sequenceDiagram\n>   A->>B: hi\n> ```',
-    ].join('\n\n')
-    const html = streamupHtml(md, {
-      [PELE_BLOCK_TAG]: ({ code }: PeleRendererProps) =>
-        createElement('i', null, code.split('\n')[0]),
-    })
-
-    expect(html).toContain('<i>flowchart TD</i>')
-    expect(html).toContain('<i>pie title Pets</i>')
-    expect(html).toContain('<i>sequenceDiagram</i>')
-    expect(html).toContain('const kept = true') // other fences are untouched
-    expect(html).not.toContain('language-mermaid')
-    expect(html.indexOf('flowchart')).toBeLessThan(html.indexOf('pie title'))
-  })
-
-  it('leaves non-mermaid code blocks as native <pre><code>', () => {
-    const html = streamupHtml('```js\nconsole.log("hi")\n```')
-    expect(html).toContain('language-js')
-    expect(html).toContain('console.log')
-  })
-})
 
 describe('PeleRenderer', () => {
   it('renders raw code as the fallback in SSR', () => {
@@ -127,7 +49,10 @@ describe('PeleRenderer', () => {
     const { container } = render(
       createElement(
         Streamup,
-        { plugins: [pele()], components: { [PELE_BLOCK_TAG]: peleBlock } },
+        {
+          plugins: [mermaid()],
+          components: { 'mermaid-block': PeleRenderer },
+        },
         markdown,
       ),
     )
