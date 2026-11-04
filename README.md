@@ -248,6 +248,63 @@ To render mermaid _and_ customize other languages, list both plugins — `mermai
 const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
 ```
 
+## Pele
+
+[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. It is a much smaller alternative to `mermaid`, and it takes the same ` ```mermaid ` fences. Use `pele()` _instead of_ `mermaid()`: both claim those fences, so whichever comes first wins.
+
+```sh
+pnpm add pele
+```
+
+````tsx
+import { Streamup } from '@opticlm/streamup'
+import { PeleRenderer, pele } from '@opticlm/streamup/pele'
+
+const plugins = useMemo(() => [pele()], [])
+const components = useMemo(
+  () => ({
+    'pele-block': ({ code, isClosed }) => (
+      <PeleRenderer code={code} isClosed={isClosed} />
+    ),
+  }),
+  [],
+)
+
+<Streamup streaming plugins={plugins} components={components}>
+  {'```mermaid\nflowchart TD\n  A --> B\n```'}
+</Streamup>
+````
+
+`pele` turns ` ```mermaid ` fenced blocks into a `<pele-block code="…" isClosed={…}>` element; map it via `components['pele-block']` (typically to `PeleRenderer`). `isClosed` remains false until the closing fence arrives, and `PeleRenderer` waits for it before rendering. Every other fenced language stays native `<pre><code>` for typeset. When Pele cannot render a diagram (a syntax error, an unsupported diagram type, a size limit) `PeleRenderer` falls back to the raw source. Rendering happens on the client: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
+
+```tsx
+import { PeleRenderer } from '@opticlm/streamup/pele'
+;<PeleRenderer code="flowchart TD; A-->B" options={{ fontSize: 14 }} />
+```
+
+`options` takes any of [Pele's render options](https://pele.run/api). Memoize it if you can, since a new object re-renders the diagram. Each diagram gets its own `idPrefix` so several can share a page without clashing SVG ids; set `idPrefix` in `options` to choose your own.
+
+Pele draws with CSS variables instead of a `theme` option. Set them on `.pele` or any ancestor, and they apply without re-rendering ([all variables](https://pele.run/theming)):
+
+```css
+.pele {
+  --pele-font: ui-sans-serif, system-ui, sans-serif;
+  --pele-accent: #5b7bd5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pele {
+    --pele-bg: #1b1b1b;
+    --pele-fg: #e6e6e6;
+    --pele-surface: #2a2a2a;
+    --pele-border: #6e6e6e;
+    --pele-line: #e6e6e6;
+  }
+}
+```
+
+Pele declares `engines.node >= 20`, which your package manager may enforce at install time. Combining it with other plugins works as in the [Mermaid](#mermaid) section: list `pele()` before `codeBlocks()` and map `pele-block` as well as `code-block`.
+
 ## Footnotes
 
 By default footnotes render the GFM way: numbered references linking to a `<section data-footnotes>` at the end of the document. Linking needs the whole document in one tree, so once a footnote appears the document renders as a single block.
@@ -303,7 +360,7 @@ const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugi
 <Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
 ```
 
-When combining `katex()`, `mermaid()`, and `codeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
+When combining `katex()`, `mermaid()` (or `pele()`), and `codeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
 
 ## What's parsed by default
 

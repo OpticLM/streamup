@@ -1,9 +1,8 @@
-import type { Element, ElementContent, Root } from 'hast'
+import type { Root } from 'hast'
 import type { MermaidConfig } from 'mermaid'
 import { useEffect, useId, useState } from 'react'
 import type { Plugin } from 'unified'
-import { visit } from 'unist-util-visit'
-import { findCode, textOf } from '../parse/processor.js'
+import { fencedBlockPlugin } from '../parse/fenced-block.js'
 import type { StreamupPlugin } from '../types.js'
 
 export type { MermaidConfig } from 'mermaid'
@@ -69,33 +68,6 @@ export function MermaidRenderer({
 
 export const MERMAID_BLOCK_TAG = 'mermaid-block'
 
-const isMermaid = (classes: unknown): boolean =>
-  Array.isArray(classes) && classes.includes('language-mermaid')
-
-function isFenceClosed(source: string, node: Element): boolean {
-  const start = node.position?.start.offset
-  const end = node.position?.end.offset
-  if (start === undefined || end === undefined) return true
-
-  const markdown = source.slice(start, end)
-  const opening = /^ {0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)/.exec(markdown)
-  const fence = opening?.[1]
-  if (!fence) return true
-
-  const fenceCharacter = fence[0]
-  const closing = new RegExp(
-    `^ {0,3}${fenceCharacter}{${fence.length},}[\\t ]*$`,
-  )
-  const lines = markdown.split(/\r?\n/)
-  return closing.test(lines[lines.length - 1] ?? '')
-}
-
-interface Replacement {
-  siblings: ElementContent[]
-  index: number
-  node: ElementContent
-}
-
 /**
  * Rehype plugin that turns ` ```mermaid ` fenced blocks into a custom
  * `<mermaid-block code="…">` element. Map it via `components['mermaid-block']`
@@ -103,28 +75,10 @@ interface Replacement {
  * `<pre><code>` for typeset. Runs after `rehype-sanitize`. On a Mermaid syntax
  * error, `MermaidRenderer` falls back to the raw source.
  */
-export const rehypeMermaid: Plugin<[], Root, Root> = () => (tree, file) => {
-  const source = String(file.value)
-  const replacements: Replacement[] = []
-  visit(tree, 'element', (el, index, parent) => {
-    if (!parent || index === null || index === undefined) return
-    if (el.tagName !== 'pre') return
-    const code = findCode(el)
-    if (!code || !isMermaid(code.properties?.className)) return
-    replacements.push({
-      siblings: parent.children as ElementContent[],
-      index,
-      node: {
-        type: 'element',
-        tagName: MERMAID_BLOCK_TAG,
-        properties: { code: textOf(code), isClosed: isFenceClosed(source, el) },
-        children: [],
-      },
-    })
-  })
-  replacements.sort((a, b) => b.index - a.index)
-  for (const r of replacements) r.siblings.splice(r.index, 1, r.node)
-}
+export const rehypeMermaid: Plugin<[], Root, Root> = fencedBlockPlugin(
+  'mermaid',
+  MERMAID_BLOCK_TAG,
+)
 
 /** `StreamupPlugin` wrapper around {@link rehypeMermaid}. */
 export function mermaid(): StreamupPlugin {

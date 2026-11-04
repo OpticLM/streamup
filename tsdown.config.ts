@@ -5,6 +5,7 @@ export default defineConfig({
     'src/index.ts',
     'src/katex/index.tsx',
     'src/mermaid/index.tsx',
+    'src/pele/index.tsx',
     'src/code-block/index.tsx',
   ],
   format: ['esm'],
@@ -23,6 +24,8 @@ export default defineConfig({
       'react/jsx-runtime',
       'mermaid',
       'katex',
+      'pele',
+      'pele/lazy',
     ],
   },
 })

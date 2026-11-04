@@ -92,6 +92,9 @@ importers:
       micromark-util-types:
         specifier: ^2.0.3
         version: 2.0.3
+      pele:
+        specifier: ^1.13.0
+        version: 1.13.0
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -2951,6 +2954,13 @@ packages:
         integrity: sha512-NOnmBpt5Y2RWbuv0LMzsayp3lVylAHLPUTut412ZA3l+C4uw4ZVkQbjShYCQ8TCpUMdPapr4YjUqLYD6v68j+w==,
       }
 
+  pele@1.13.0:
+    resolution:
+      {
+        integrity: sha512-Ie8UKY9x00MsuR3jO6AzUwzK2Z6MIV3Tf4EDdITiuk8Uaz8K7g0R082WqsqNaSU8DdgkrRvZThzhit83mi/uiw==,
+      }
+    engines: { node: ">=20" }
+
   picocolors@1.1.1:
     resolution:
       {
@@ -5342,6 +5352,8 @@ snapshots:
       entities: 8.0.0
 
   path-data-parser@0.1.0: {}
+
+  pele@1.13.0: {}
 
   picocolors@1.1.1: {}
 

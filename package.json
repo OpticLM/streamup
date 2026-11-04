@@ -18,6 +18,10 @@
       "types": "./dist/mermaid/index.d.mts",
       "default": "./dist/mermaid/index.mjs"
     },
+    "./pele": {
+      "types": "./dist/pele/index.d.mts",
+      "default": "./dist/pele/index.mjs"
+    },
     "./code-block": {
       "types": "./dist/code-block/index.d.mts",
       "default": "./dist/code-block/index.mjs"
@@ -52,6 +56,9 @@
     },
     "mermaid": {
       "optional": true
+    },
+    "pele": {
+      "optional": true
     }
   },
   "dependencies": {
@@ -85,6 +92,7 @@
     "katex": "^0.19.0",
     "mermaid": "^12.2.0",
     "micromark-util-types": "^2.0.3",
+    "pele": "^1.13.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tsdown": "^0.23.1",
