@@ -12,7 +12,11 @@ export interface PeleRendererProps {
   code: string
   /** Options passed to Pele's `render()`. */
   options?: RenderOptions
-  /** Whether the source Markdown fence has been closed. Defaults to `true`. */
+  /**
+   * Whether the source Markdown fence has been closed. While `false` the source
+   * is still streaming in, so a prefix that does not parse yet keeps the
+   * previous drawing instead of falling back to the source. Defaults to `true`.
+   */
   isClosed?: boolean
 }
 
@@ -28,10 +32,6 @@ export function PeleRenderer({
 
   useEffect(() => {
     let cancelled = false
-    if (!isClosed) {
-      setSvg(null)
-      return
-    }
     // `pele/lazy` loads only the diagram module a source needs, so pages
     // without diagrams never download the renderer.
     import('pele/lazy')
@@ -40,15 +40,16 @@ export function PeleRenderer({
         if (!cancelled) setSvg(res.svg)
       })
       .catch(() => {
-        // `PeleError` (syntax, unsupported diagram, limits): show the source.
-        if (!cancelled) setSvg(null)
+        // A `PeleError`. Half-streamed source often fails to parse: keep the
+        // last drawing. Once the fence is closed the source is final, so show it.
+        if (!cancelled && isClosed) setSvg(null)
       })
     return () => {
       cancelled = true
     }
   }, [code, idPrefix, options, isClosed])
 
-  if (!isClosed || svg === null) {
+  if (svg === null) {
     return (
       <pre>
         <code>{code}</code>

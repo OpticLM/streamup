@@ -114,29 +114,59 @@ describe('PeleRenderer', () => {
     )
   })
 
-  it('does not render an unclosed block', async () => {
-    const { container } = render(
-      createElement(PeleRenderer, { code: FLOWCHART, isClosed: false }),
-    )
-    await settle()
+  describe('while the fence is still open', () => {
+    const open = (code: string, isClosed = false) =>
+      createElement(PeleRenderer, { code, isClosed })
 
-    expect(container.querySelector('svg')).toBeNull()
-    expect(container.querySelector('pre')).not.toBeNull()
-    expect(container.textContent).toContain('flowchart')
-  })
+    it('draws as soon as the source parses', async () => {
+      const { container } = render(
+        createElement(
+          Streamup,
+          { plugins: [pele()], components: { [PELE_BLOCK_TAG]: peleBlock } },
+          `\`\`\`mermaid\n${FLOWCHART}`, // no closing fence yet
+        ),
+      )
 
-  it('renders once the fence closes', async () => {
-    const { container, rerender } = render(
-      createElement(PeleRenderer, { code: FLOWCHART, isClosed: false }),
-    )
-    await settle()
-    expect(container.querySelector('svg')).toBeNull()
+      await waitFor(() =>
+        expect(container.querySelector('svg.pele')).not.toBeNull(),
+      )
+    })
 
-    rerender(createElement(PeleRenderer, { code: FLOWCHART, isClosed: true }))
-    await waitFor(() =>
-      expect(container.querySelector('svg.pele')).not.toBeNull(),
-    )
-    expect(container.querySelector('pre')).toBeNull()
+    it('shows the source until something parses', async () => {
+      const { container } = render(open(INVALID))
+      await settle()
+
+      expect(container.querySelector('svg')).toBeNull()
+      expect(container.querySelector('pre')).not.toBeNull()
+      expect(container.textContent).toContain('flowchart')
+    })
+
+    it('keeps the last drawing while a prefix does not parse', async () => {
+      const { container, rerender } = render(open(FLOWCHART))
+      await waitFor(() =>
+        expect(container.querySelector('svg.pele')).not.toBeNull(),
+      )
+      const first = container.innerHTML
+
+      rerender(open(`${FLOWCHART}\n  B -->`)) // cut off mid-statement
+      await settle()
+      expect(container.innerHTML).toBe(first)
+
+      rerender(open(`${FLOWCHART}\n  B --> C`))
+      await waitFor(() => expect(container.innerHTML).not.toBe(first))
+      expect(container.querySelector('svg.pele')).not.toBeNull()
+    })
+
+    it('shows the source if the fence closes on source that does not parse', async () => {
+      const { container, rerender } = render(open(FLOWCHART))
+      await waitFor(() =>
+        expect(container.querySelector('svg.pele')).not.toBeNull(),
+      )
+
+      rerender(open(INVALID, true))
+      await waitFor(() => expect(container.querySelector('svg')).toBeNull())
+      expect(container.querySelector('pre')).not.toBeNull()
+    })
   })
 
   it('falls back to the raw source when the diagram cannot be rendered', async () => {

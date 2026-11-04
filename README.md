@@ -275,7 +275,9 @@ const components = useMemo(
 </Streamup>
 ````
 
-`pele` turns ` ```mermaid ` fenced blocks into a `<pele-block code="…" isClosed={…}>` element; map it via `components['pele-block']` (typically to `PeleRenderer`). `isClosed` remains false until the closing fence arrives, and `PeleRenderer` waits for it before rendering. Every other fenced language stays native `<pre><code>` for typeset. When Pele cannot render a diagram (a syntax error, an unsupported diagram type, a size limit) `PeleRenderer` falls back to the raw source. Rendering happens on the client: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
+`pele` turns ` ```mermaid ` fenced blocks into a `<pele-block code="…" isClosed={…}>` element; map it via `components['pele-block']` (typically to `PeleRenderer`). Every other fenced language stays native `<pre><code>` for typeset.
+
+Diagrams are drawn _while they stream_. `isClosed` is false until the closing fence arrives, and during that time a source that does not parse yet (the text is cut off mid-statement) just keeps the previous drawing on screen. Once the fence closes the source is final, so if Pele still cannot render it (a syntax error, an unsupported diagram type, a size limit) `PeleRenderer` shows the raw source instead. Rendering happens on the client: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
 
 ```tsx
 import { PeleRenderer } from '@opticlm/streamup/pele'
