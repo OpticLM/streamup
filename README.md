@@ -250,7 +250,7 @@ const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
 
 ## Pele
 
-[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. It is a much smaller alternative to `mermaid`, and it takes the same ` ```mermaid ` fences. Use `pele()` _instead of_ `mermaid()`: both claim those fences, so whichever comes first wins.
+[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. It is an alternative to `mermaid` and takes the same ` ```mermaid ` fences. Use `pele()` _instead of_ `mermaid()`: both claim those fences, so whichever comes first wins.
 
 ```sh
 pnpm add pele
@@ -277,7 +277,7 @@ const components = useMemo(
 
 `pele` turns ` ```mermaid ` fenced blocks into a `<pele-block code="…" isClosed={…}>` element; map it via `components['pele-block']` (typically to `PeleRenderer`). Every other fenced language stays native `<pre><code>` for typeset.
 
-Diagrams are drawn _while they stream_. `isClosed` is false until the closing fence arrives, and during that time a source that does not parse yet (the text is cut off mid-statement) just keeps the previous drawing on screen. Once the fence closes the source is final, so if Pele still cannot render it (a syntax error, an unsupported diagram type, a size limit) `PeleRenderer` shows the raw source instead. Rendering happens on the client: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
+Diagrams are drawn _while they stream_. Until the closing fence arrives (`isClosed` is false), source that does not parse yet because it is cut off mid-statement keeps the previous drawing on screen, or the source itself if nothing has been drawn. Once the fence closes the source is final, so if Pele still cannot render it (a syntax error, an unsupported diagram type, a size limit) `PeleRenderer` shows the raw source. Rendering happens on the client: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
 
 ```tsx
 import { PeleRenderer } from '@opticlm/streamup/pele'
@@ -305,7 +305,7 @@ Pele draws with CSS variables instead of a `theme` option. Set them on `.pele` o
 }
 ```
 
-Pele declares `engines.node >= 20`, which your package manager may enforce at install time. Combining it with other plugins works as in the [Mermaid](#mermaid) section: list `pele()` before `codeBlocks()` and map `pele-block` as well as `code-block`.
+Pele's `package.json` declares `engines.node >= 20`. Combining it with other plugins works as in the [Mermaid](#mermaid) section: list `pele()` before `codeBlocks()` and map `pele-block` as well as `code-block`.
 
 ## Footnotes
 

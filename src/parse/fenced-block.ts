@@ -1,4 +1,4 @@
-import type { Element, ElementContent, Root } from 'hast'
+import type { Element, Root } from 'hast'
 import type { Plugin } from 'unified'
 import { visit } from 'unist-util-visit'
 import { findCode, textOf } from './processor.js'
@@ -21,12 +21,6 @@ function isFenceClosed(source: string, node: Element): boolean {
   return closing.test(lines[lines.length - 1] ?? '')
 }
 
-interface Replacement {
-  siblings: ElementContent[]
-  index: number
-  node: ElementContent
-}
-
 /**
  * Builds a rehype plugin that replaces every `<pre><code class="language-X">`
  * fenced block with a custom `<tagName code="…" isClosed={…}>` element.
@@ -43,27 +37,20 @@ export function fencedBlockPlugin(
 
   return () => (tree, file) => {
     const source = String(file.value)
-    const replacements: Replacement[] = []
     visit(tree, 'element', (el, index, parent) => {
-      if (!parent || index === null || index === undefined) return
-      if (el.tagName !== 'pre') return
+      if (!parent || index === undefined || el.tagName !== 'pre') return
       const code = findCode(el)
       if (!code || !matches(code.properties?.className)) return
-      replacements.push({
-        siblings: parent.children as ElementContent[],
-        index,
-        node: {
-          type: 'element',
-          tagName,
-          properties: {
-            code: textOf(code),
-            isClosed: isFenceClosed(source, el),
-          },
-          children: [],
+      // One node for one node: siblings keep their indices, so swap in place.
+      parent.children[index] = {
+        type: 'element',
+        tagName,
+        properties: {
+          code: textOf(code),
+          isClosed: isFenceClosed(source, el),
         },
-      })
+        children: [],
+      }
     })
-    replacements.sort((a, b) => b.index - a.index)
-    for (const r of replacements) r.siblings.splice(r.index, 1, r.node)
   }
 }

@@ -15,7 +15,8 @@ export interface PeleRendererProps {
   /**
    * Whether the source Markdown fence has been closed. While `false` the source
    * is still streaming in, so a prefix that does not parse yet keeps the
-   * previous drawing instead of falling back to the source. Defaults to `true`.
+   * previous drawing (or the source, if nothing has been drawn). Once `true`,
+   * source that does not parse is shown as code. Defaults to `true`.
    */
   isClosed?: boolean
 }
@@ -40,8 +41,9 @@ export function PeleRenderer({
         if (!cancelled) setSvg(res.svg)
       })
       .catch(() => {
-        // A `PeleError`. Half-streamed source often fails to parse: keep the
-        // last drawing. Once the fence is closed the source is final, so show it.
+        // Pele threw (a `PeleError`) or its chunk failed to load. Half-streamed
+        // source often fails to parse: keep the last drawing. Once the fence is
+        // closed the source is final, so show it. Any later update retries.
         if (!cancelled && isClosed) setSvg(null)
       })
     return () => {
@@ -59,7 +61,7 @@ export function PeleRenderer({
 
   return (
     <div
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: Pele emits sanitized SVG (no scripts, event handlers, or javascript:/data: URLs)
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: Pele emits sanitized SVG: no scripts or event handlers, and unsafe URL schemes are blocked (https://pele.run/security)
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )

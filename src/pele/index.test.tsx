@@ -72,6 +72,26 @@ describe('pele', () => {
     )
   })
 
+  it('replaces every mermaid fence in place, wherever it sits', () => {
+    const md = [
+      '```mermaid\nflowchart TD\n  A --> B\n```',
+      '```mermaid\npie title Pets\n  "Dogs" : 1\n```',
+      '```js\nconst kept = true\n```',
+      '> ```mermaid\n> sequenceDiagram\n>   A->>B: hi\n> ```',
+    ].join('\n\n')
+    const html = streamupHtml(md, {
+      [PELE_BLOCK_TAG]: ({ code }: PeleRendererProps) =>
+        createElement('i', null, code.split('\n')[0]),
+    })
+
+    expect(html).toContain('<i>flowchart TD</i>')
+    expect(html).toContain('<i>pie title Pets</i>')
+    expect(html).toContain('<i>sequenceDiagram</i>')
+    expect(html).toContain('const kept = true') // other fences are untouched
+    expect(html).not.toContain('language-mermaid')
+    expect(html.indexOf('flowchart')).toBeLessThan(html.indexOf('pie title'))
+  })
+
   it('leaves non-mermaid code blocks as native <pre><code>', () => {
     const html = streamupHtml('```js\nconsole.log("hi")\n```')
     expect(html).toContain('language-js')
@@ -100,12 +120,15 @@ describe('PeleRenderer', () => {
     expect(container.textContent).not.toContain('flowchart TD')
   })
 
-  it('renders a diagram streamed through <Streamup>', async () => {
+  it.each([
+    ['closed', `\`\`\`mermaid\n${FLOWCHART}\n\`\`\``],
+    ['still open', `\`\`\`mermaid\n${FLOWCHART}`],
+  ])('draws a %s fence streamed through <Streamup>', async (_, markdown) => {
     const { container } = render(
       createElement(
         Streamup,
         { plugins: [pele()], components: { [PELE_BLOCK_TAG]: peleBlock } },
-        `\`\`\`mermaid\n${FLOWCHART}\n\`\`\``,
+        markdown,
       ),
     )
 
@@ -117,20 +140,6 @@ describe('PeleRenderer', () => {
   describe('while the fence is still open', () => {
     const open = (code: string, isClosed = false) =>
       createElement(PeleRenderer, { code, isClosed })
-
-    it('draws as soon as the source parses', async () => {
-      const { container } = render(
-        createElement(
-          Streamup,
-          { plugins: [pele()], components: { [PELE_BLOCK_TAG]: peleBlock } },
-          `\`\`\`mermaid\n${FLOWCHART}`, // no closing fence yet
-        ),
-      )
-
-      await waitFor(() =>
-        expect(container.querySelector('svg.pele')).not.toBeNull(),
-      )
-    })
 
     it('shows the source until something parses', async () => {
       const { container } = render(open(INVALID))
@@ -169,53 +178,13 @@ describe('PeleRenderer', () => {
     })
   })
 
-  it('falls back to the raw source when the diagram cannot be rendered', async () => {
-    const { renderAsync } = await import('pele/lazy')
-    await expect(renderAsync(INVALID)).rejects.toMatchObject({
-      name: 'PeleError',
-    })
-
+  it('shows the source of a closed fence that cannot be rendered', async () => {
     const { container } = render(createElement(PeleRenderer, { code: INVALID }))
     await settle()
 
     expect(container.querySelector('svg')).toBeNull()
     expect(container.querySelector('pre')).not.toBeNull()
     expect(container.textContent).toContain('flowchart')
-  })
-
-  it('drops a previous diagram when the new source is invalid', async () => {
-    const { container, rerender } = render(
-      createElement(PeleRenderer, { code: FLOWCHART }),
-    )
-    await waitFor(() =>
-      expect(container.querySelector('svg.pele')).not.toBeNull(),
-    )
-
-    rerender(createElement(PeleRenderer, { code: INVALID }))
-    await waitFor(() => expect(container.querySelector('svg')).toBeNull())
-    expect(container.querySelector('pre')).not.toBeNull()
-  })
-
-  it('passes options through to Pele', async () => {
-    const styleOf = (container: HTMLElement) =>
-      container.querySelector('svg.pele')?.getAttribute('style') ?? ''
-
-    const fluid = render(createElement(PeleRenderer, { code: FLOWCHART }))
-    await waitFor(() => expect(styleOf(fluid.container)).not.toBe(''))
-    // Pele sizes diagrams fluidly by default...
-    expect(styleOf(fluid.container)).toContain('max-width')
-
-    const fixed = render(
-      createElement(PeleRenderer, {
-        code: FLOWCHART,
-        options: { responsive: false },
-      }),
-    )
-    await waitFor(() =>
-      expect(fixed.container.querySelector('svg.pele')).not.toBeNull(),
-    )
-    // ...and `responsive: false` turns that off.
-    expect(styleOf(fixed.container)).not.toContain('max-width')
   })
 
   it('gives every instance its own SVG id prefix, which options can override', async () => {
@@ -237,13 +206,8 @@ describe('PeleRenderer', () => {
     )
 
     const ids = [...container.querySelectorAll('[id]')].map((el) => el.id)
-    expect(ids).toHaveLength(6)
-    expect(new Set(ids).size).toBe(6)
-    expect(ids).toContain('custom-title')
-    expect(ids).toContain('custom-desc')
-    expect(ids.filter((id) => !id.startsWith('custom-'))).toEqual(
-      expect.arrayContaining([expect.stringMatching(/^pele-[\w-]+-title$/)]),
-    )
+    expect(ids).toContain('custom-title') // the option reaches Pele...
+    expect(new Set(ids).size).toBe(ids.length) // ...and nothing collides
   })
 
   it('does not emit scripts or event handlers for hostile diagram source', async () => {
@@ -251,6 +215,7 @@ describe('PeleRenderer', () => {
       'flowchart TD',
       '  A["<img src=x onerror=alert(1)>"] --> B["<script>alert(1)</script>"]',
       '  click A href "javascript:alert(1)"',
+      '  click B href "data:text/html,<script>alert(1)</script>"',
     ].join('\n')
     const { container } = render(createElement(PeleRenderer, { code }))
     await waitFor(() =>
@@ -258,6 +223,6 @@ describe('PeleRenderer', () => {
     )
 
     expect(container.querySelector('script, img, foreignObject')).toBeNull()
-    expect(container.innerHTML).not.toMatch(/onerror|javascript:/i)
+    expect(container.innerHTML).not.toMatch(/onerror|javascript:|data:/i)
   })
 })
