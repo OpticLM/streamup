@@ -39,6 +39,20 @@ describe('mermaid', () => {
     )
   })
 
+  it.each([
+    ['a blockquote', '> ```mermaid\n> flowchart TD\n>   A --> B\n> ```'],
+    ['a list', '- ```mermaid\n  flowchart TD\n    A --> B\n  ```'],
+    [
+      'a nested list',
+      '- a\n  - ```mermaid\n    flowchart TD\n      A --> B\n    ```',
+    ],
+  ])('sees a fence closed inside %s as closed', (_, markdown) => {
+    expect(html(markdown)).toContain('data-closed="true"')
+    // ...and the same fence without its closing line is still open.
+    const open = markdown.split('\n').slice(0, -1).join('\n')
+    expect(html(open)).toContain('data-closed="false"')
+  })
+
   it('replaces every mermaid fence in place, wherever it sits', () => {
     const out = html(
       [

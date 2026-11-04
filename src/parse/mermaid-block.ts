@@ -20,11 +20,12 @@ function isFenceClosed(source: string, node: Element): boolean {
   if (!fence) return true
 
   const fenceCharacter = fence[0]
-  const closing = new RegExp(
-    `^ {0,3}${fenceCharacter}{${fence.length},}[\\t ]*$`,
-  )
+  const closing = new RegExp(`^${fenceCharacter}{${fence.length},}[\\t ]*$`)
   const lines = markdown.split(/\r?\n/)
-  return closing.test(lines[lines.length - 1] ?? '')
+  // Past the first line, the source still carries the fence's container
+  // prefix (`> ` of a blockquote, a list item's indentation): drop it.
+  const last = (lines[lines.length - 1] ?? '').replace(/^[ \t>]*/, '')
+  return closing.test(last)
 }
 
 /**
