@@ -5,8 +5,8 @@ import type { PluggableList } from 'unified'
 import type { CodeBlockProps } from './code-block/types.js'
 import type { FootnoteMode, FootnoteRefProps } from './footnote/types.js'
 
+/** Rehype plugins, run on each block of the HTML Words renders. */
 export interface StreamupPlugin {
-  remarkPlugins?: PluggableList
   rehypePlugins?: PluggableList
 }
 
@@ -65,7 +65,8 @@ export interface StreamupProps {
   pacing?: PacingConfig | boolean
   components?: StreamupComponents
   plugins?: StreamupPlugin[]
-  singleDollarTextMath?: boolean
+  /** Render TeX between dollar signs, and `math` fences, as SVG. Default `true`. */
+  math?: boolean
   /**
    * `'section'` (default) renders GFM footnotes. `'inline'` renders each
    * reference through `components['footnote-ref']` with its footnote's

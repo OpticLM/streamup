@@ -1,108 +1,103 @@
+import type { Root } from 'hast'
+import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { visit } from 'unist-util-visit'
 import { describe, expect, it } from 'vitest'
-import { createProcessor, renderBlock } from './processor.js'
+import { Streamup } from '../streamup.js'
+import type { StreamupProps } from '../types.js'
 
-const processor = createProcessor({})
-const render = (md: string) =>
-  renderToStaticMarkup(renderBlock(md, { processor }))
+const render = (md: string, props: StreamupProps = {}) =>
+  renderToStaticMarkup(createElement(Streamup, props, md))
 
-describe('renderBlock', () => {
-  it('renders basic markdown', () => {
-    const html = render('# Hello')
-    expect(html).toContain('<h1>')
-    expect(html).toContain('Hello')
-  })
-
-  it('renders GFM tables', () => {
-    const md = '| A | B |\n|---|---|\n| 1 | 2 |'
-    expect(render(md)).toContain('<table>')
-  })
-
-  it('renders GFM strikethrough', () => {
-    expect(render('~~deleted~~')).toContain('<del>')
-  })
-
-  it('renders GFM task lists', () => {
-    expect(render('- [x] done\n- [ ] todo')).toContain('type="checkbox"')
-  })
-
-  it('parses math syntax with remark-math', () => {
-    expect(render('$$\nE = mc^2\n$$')).toContain('math')
-  })
-
-  it('renders inline code', () => {
-    const html = render('Use `const`')
-    expect(html).toContain('<code>')
-    expect(html).toContain('const')
-  })
-
-  it('renders fenced code blocks with a language class', () => {
-    expect(render('```js\nconst x = 1\n```')).toContain('language-js')
-  })
-
-  it('sanitizes raw HTML', () => {
-    expect(render('<script>alert("xss")</script>')).not.toContain('<script>')
-  })
-
-  it('renders links as native anchors', () => {
-    const html = render('[click](https://example.com)')
-    expect(html).toContain('<a')
-    expect(html).toContain('href="https://example.com"')
-  })
-
-  it('handles empty content', () => {
-    expect(render('')).toBeDefined()
-  })
-
-  it('enables single dollar math when configured', () => {
-    const p = createProcessor({ singleDollarTextMath: true })
-    const html = renderToStaticMarkup(
-      renderBlock('Inline $x^2$ math', { processor: p }),
+describe('rendering', () => {
+  it('renders GFM', () => {
+    const html = render(
+      '| A | B |\n|---|:-:|\n| 1 | 2 |\n\n~~gone~~ `code`\n\n- [x] done',
     )
-    expect(html).toContain('math')
+    expect(html).toContain('<th style="text-align:center">B</th>')
+    expect(html).toContain('<del>gone</del> <code>code</code>')
+    expect(html).toContain('<input disabled="" type="checkbox" checked=""/>')
   })
 
-  it('does not parse single dollar math by default', () => {
-    expect(render('Price is $5 and $10')).not.toContain('math-inline')
+  it('renders fenced code with a language class', () => {
+    expect(render('```js\nconst x = 1\n```')).toBe(
+      '<pre><code class="language-js">const x = 1\n</code></pre>',
+    )
+  })
+
+  it('renders math as SVG, and leaves it as text without `math`', () => {
+    expect(render('$x^2$ and\n\n$$\nE = mc^2\n$$')).toMatch(
+      /^<p><svg [^>]*aria-label="x\^2".*<\/svg> and<\/p><svg [^>]*aria-label="E = mc\^2\n"/s,
+    )
+    expect(render('Price: $5 and $10')).toBe('<p>Price: $5 and $10</p>')
+    expect(render('$x^2$', { math: false })).toBe('<p>$x^2$</p>')
+  })
+
+  it('lets emphasis open and close next to CJK text', () => {
+    expect(render('中文**强调**中文')).toBe(
+      '<p>中文<strong>强调</strong>中文</p>',
+    )
+  })
+
+  it('ends an autolink at CJK punctuation', () => {
+    expect(render('见 https://example.com/路径。下一句')).toBe(
+      '<p>见 <a href="https://example.com/%E8%B7%AF%E5%BE%84">https://example.com/路径</a>。下一句</p>',
+    )
+    expect(render('www.example.com，好')).toBe(
+      '<p><a href="http://www.example.com">www.example.com</a>，好</p>',
+    )
+  })
+
+  it('omits raw HTML and keeps its text', () => {
+    expect(render('H<sub>2</sub>O <script>alert(1)</script>')).toBe(
+      '<p>H2O alert(1)</p>',
+    )
+  })
+
+  it('drops unsafe URLs and keeps safe ones', () => {
+    const html = render(
+      '[a](javascript:alert(1)) [b](https://x.y) [c](/rel) [d](mailto:a@b.c) ![e](data:image/png;base64,x)',
+    )
+    expect(html).toBe(
+      '<p><a>a</a> <a href="https://x.y">b</a> <a href="/rel">c</a> <a href="mailto:a@b.c">d</a> <img alt="e"/></p>',
+    )
+  })
+
+  it('marks syntax that is still streaming', () => {
+    expect(render('[a link', { streaming: true })).toBe(
+      '<p><a data-markdown-incomplete="">a link</a></p>',
+    )
+    expect(render('```js\nlet', { streaming: true })).toContain(
+      '<pre data-markdown-incomplete="">',
+    )
+  })
+
+  it('runs rehype plugins on every block', () => {
+    const tags: string[] = []
+    const probe = () => (tree: Root) => {
+      visit(tree, 'element', (node) => {
+        tags.push(node.tagName)
+      })
+    }
+    render('# A\n\nB', { plugins: [{ rehypePlugins: [probe] }] })
+    expect(tags).toEqual(['h1', 'p'])
   })
 })
 
 describe('footnotes', () => {
-  it('links a footnote reference to its definition', () => {
-    const html = render('Body[^1].\n\n[^1]: def.')
-    expect(html).toContain('href="#user-content-fn-1"')
-    expect(html).toContain('id="user-content-fn-1"')
-    expect(html).not.toContain('user-content-user-content-fn')
-  })
-
-  it('links a footnote backref to its reference', () => {
-    const html = render('Body[^1].\n\n[^1]: def.')
-    expect(html).toContain('href="#user-content-fnref-1"')
-    expect(html).toContain('id="user-content-fnref-1"')
-  })
-
-  it('resolves every footnote href to a matching id', () => {
-    // Numeric, named, and a repeated reference (produces a fnref-1-2 backref).
-    const md = [
-      'Alpha[^1], beta[^1], gamma[^note].',
-      '',
-      '[^1]: first def.',
-      '[^note]: second def.',
-    ].join('\n')
-    const html = render(md)
+  it('links every reference and backref to a matching id', () => {
+    const html = render(
+      'Alpha[^1], beta[^1], gamma[^note].\n\n[^1]: first.\n[^note]: second.',
+    )
     const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))
     const fragments = [...html.matchAll(/href="#([^"]+)"/g)].map((m) => m[1])
-    expect(fragments.length).toBeGreaterThan(0)
+    expect(fragments).toHaveLength(6)
     for (const fragment of fragments) {
       expect(ids.has(fragment), `no id for href #${fragment}`).toBe(true)
     }
   })
 
-  it('keeps the user-content- namespacing on the label and raw HTML ids', () => {
-    const html = render('Body[^1].\n\n[^1]: def.\n\n<div id="x">raw</div>')
-    expect(html).toContain('id="user-content-footnote-label"')
-    expect(html).toContain('aria-describedby="user-content-footnote-label"')
-    expect(html).toContain('id="user-content-x"')
-    expect(html).not.toContain('user-content-user-content-')
+  it('shows a reference without a definition as text', () => {
+    expect(render('Body[^1].')).toBe('<p>Body[^1].</p>')
   })
 })

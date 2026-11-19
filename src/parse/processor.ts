@@ -1,60 +1,30 @@
 import type { Element, Root } from 'hast'
+import { fromHtmlIsomorphic } from 'hast-util-from-html-isomorphic'
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime'
 import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import remarkCjkFriendly from 'remark-cjk-friendly'
-import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import remarkParse from 'remark-parse'
-import remarkRehype from 'remark-rehype'
 import type { PluggableList } from 'unified'
 import { unified } from 'unified'
 import { rehypeInlineFootnotes } from '../footnote/rehype-inline-footnotes.js'
-import { remarkOrphanFootnoteRefs } from '../footnote/remark-orphan-footnote-refs.js'
 import type { FootnoteMode } from '../footnote/types.js'
 import type { StreamupComponents } from '../types.js'
-import { rehypeFixFootnoteIds } from './rehype-fix-footnote-ids.js'
-import { remarkCjkAutolinkBoundary } from './remark-cjk-autolink-boundary.js'
-
-const sanitizeSchema = {
-  ...defaultSchema,
-  protocols: {
-    ...defaultSchema.protocols,
-    href: [...(defaultSchema.protocols?.href ?? []), 'tel'],
-  },
-}
+import { rehypeCjkAutolinkBoundary } from './rehype-cjk-autolink-boundary.js'
+import { rehypeSafeUrls } from './rehype-safe-urls.js'
 
 export interface ProcessorOptions {
-  extraRemarkPlugins?: PluggableList
-  extraRehypePlugins?: PluggableList
-  singleDollarTextMath?: boolean
+  rehypePlugins?: PluggableList
   footnotes?: FootnoteMode
 }
 
+/** The rehype plugins every block of Words' HTML runs through. */
 export function createProcessor(options: ProcessorOptions = {}) {
-  const inlineFootnotes = options.footnotes === 'inline'
   return unified()
-    .use(remarkParse)
-    .use(remarkCjkFriendly)
-    .use(remarkGfm)
-    .use(inlineFootnotes ? [remarkOrphanFootnoteRefs] : [])
-    .use(remarkCjkAutolinkBoundary)
-    .use(remarkCjkFriendlyGfmStrikethrough)
-    .use(remarkMath, {
-      singleDollarTextMath: options.singleDollarTextMath ?? false,
-    })
-    .use(options.extraRemarkPlugins ?? [])
-    .use(remarkRehype, { allowDangerousHtml: true })
-    .use(rehypeRaw)
-    .use(rehypeSanitize, sanitizeSchema)
-    .use(rehypeFixFootnoteIds)
-    .use(inlineFootnotes ? [rehypeInlineFootnotes] : [])
-    .use(options.extraRehypePlugins ?? [])
+    .use(rehypeSafeUrls)
+    .use(rehypeCjkAutolinkBoundary)
+    .use(options.footnotes === 'inline' ? [rehypeInlineFootnotes] : [])
+    .use(options.rehypePlugins ?? [])
 }
 
-export type MdProcessor = ReturnType<typeof createProcessor>
+export type BlockProcessor = ReturnType<typeof createProcessor>
 
 export function extractLanguage(className: unknown): string {
   const classes = Array.isArray(className)
@@ -81,14 +51,17 @@ export function textOf(node: Element): string {
     .join('')
 }
 
+/** Render a block of Words' HTML to React. */
 export function renderBlock(
-  block: string,
+  html: string,
   {
     processor,
     components,
-  }: { processor: MdProcessor; components?: StreamupComponents },
+  }: { processor: BlockProcessor; components?: StreamupComponents },
 ) {
-  const tree = processor.runSync(processor.parse(block), block) as Root
+  const tree = processor.runSync(
+    fromHtmlIsomorphic(html, { fragment: true }),
+  ) as Root
   return toJsxRuntime(tree, {
     Fragment,
     components,

@@ -1,62 +1,46 @@
+import { createHtmlSession } from '@pierre/words'
 import type { Element, Root } from 'hast'
+import { fromHtmlIsomorphic } from 'hast-util-from-html-isomorphic'
+import { unified } from 'unified'
 import { visit } from 'unist-util-visit'
 import { describe, expect, it } from 'vitest'
-import { createProcessor } from '../parse/processor.js'
+import { splitDocument } from '../parse/blocks.js'
+import { rehypeInlineFootnotes } from './rehype-inline-footnotes.js'
 
-const processor = createProcessor({ footnotes: 'inline' })
+const processor = unified().use(rehypeInlineFootnotes)
 
-function run(md: string): Root {
-  return processor.runSync(processor.parse(md), md) as Root
-}
-
-function elements(tree: Root, tagName: string): Element[] {
-  const found: Element[] = []
-  visit(tree, 'element', (node) => {
-    if (node.tagName === tagName) found.push(node)
+/** The references in the body of `md`, which inline mode renders without its footnote section. */
+function refs(md: string) {
+  const html = splitDocument(
+    createHtmlSession().render(md).html,
+    'inline',
+  ).blocks.join('')
+  const tree = processor.runSync(fromHtmlIsomorphic(html, { fragment: true }))
+  const found: Element['properties'][] = []
+  visit(tree as Root, 'element', (node) => {
+    if (node.tagName === 'sup') found.push({ sup: true })
+    if (node.tagName === 'footnote-ref') found.push(node.properties)
   })
   return found
 }
 
 describe('rehypeInlineFootnotes', () => {
-  it('turns a reference into a footnote-ref element', () => {
-    const tree = run('Body[^1] text.')
-    expect(elements(tree, 'sup')).toEqual([])
-    expect(elements(tree, 'footnote-ref').map((el) => el.properties)).toEqual([
-      { label: '1' },
+  it('turns a linked reference into a footnote-ref with its number', () => {
+    expect(refs('A[^note] and B[^note]\n\n[^note]: Def.')).toEqual([
+      { label: '1', footnote: '1' },
+      { label: '1', footnote: '1' },
     ])
   })
 
-  it('keeps the label as written', () => {
-    const tree = run('A[^Note] and B[^note]')
-    expect(
-      elements(tree, 'footnote-ref').map((el) => el.properties.label),
-    ).toEqual(['Note', 'note'])
+  it('turns an unlinked reference into a footnote-ref with its label', () => {
+    expect(refs('A[^Note], B[^x][^y].')).toEqual([
+      { label: 'Note' },
+      { label: 'x' },
+      { label: 'y' },
+    ])
   })
 
-  it('drops the footnote section', () => {
-    const tree = run('Body[^1].\n\n[^1]: The def.')
-    expect(elements(tree, 'section')).toEqual([])
-    expect(elements(tree, 'footnote-ref')).toHaveLength(1)
-  })
-
-  it('leaves raw HTML footnote markup alone', () => {
-    const tree = run('<sup><a href="#x" data-footnote-ref>1</a></sup>')
-    expect(elements(tree, 'footnote-ref')).toEqual([])
-    expect(elements(tree, 'sup')).toHaveLength(1)
-  })
-
-  it('runs before user rehype plugins', () => {
-    const seen: string[] = []
-    const probe = () => (tree: Root) => {
-      visit(tree, 'element', (node) => {
-        seen.push(node.tagName)
-      })
-    }
-    const withProbe = createProcessor({
-      footnotes: 'inline',
-      extraRehypePlugins: [probe],
-    })
-    withProbe.runSync(withProbe.parse('A[^1]'), 'A[^1]')
-    expect(seen).toContain('footnote-ref')
+  it('leaves references inside code alone', () => {
+    expect(refs('`[^1]`\n\n```\n[^2]\n```')).toEqual([])
   })
 })

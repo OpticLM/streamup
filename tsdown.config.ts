@@ -3,7 +3,6 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: [
     'src/index.ts',
-    'src/katex/index.tsx',
     'src/mermaid/index.tsx',
     'src/pele/index.tsx',
     'src/code-block/index.tsx',
@@ -23,7 +22,6 @@ export default defineConfig({
       'react-dom',
       'react/jsx-runtime',
       'mermaid',
-      'katex',
       'pele',
       'pele/lazy',
     ],

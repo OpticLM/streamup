@@ -1,68 +1,69 @@
 import type { ReactNode } from 'react'
 import { useCallback, useSyncExternalStore } from 'react'
-import type { Footnotes } from './types.js'
 
 type Listener = () => void
 
 /**
- * Rendered footnote content by identifier, observable per identifier so a
- * footnote change re-renders only the references to that footnote.
+ * Rendered footnote content by number, observable per footnote so a change
+ * re-renders only the references to that footnote.
  */
 export class FootnoteStore {
   readonly #contents = new Map<string, ReactNode>()
   readonly #listeners = new Map<string, Set<Listener>>()
 
-  constructor(initial?: Footnotes<ReactNode>) {
+  constructor(initial?: ReadonlyMap<string, ReactNode>) {
     if (initial) this.sync(initial)
   }
 
-  get(identifier: string): ReactNode {
-    return this.#contents.get(identifier)
+  get(footnote: string): ReactNode {
+    return this.#contents.get(footnote)
   }
 
-  subscribe(identifier: string, listener: Listener): () => void {
-    const listeners = this.#listeners.get(identifier) ?? new Set()
-    this.#listeners.set(identifier, listeners)
+  subscribe(footnote: string, listener: Listener): () => void {
+    const listeners = this.#listeners.get(footnote) ?? new Set()
+    this.#listeners.set(footnote, listeners)
     listeners.add(listener)
     return () => {
       listeners.delete(listener)
-      if (listeners.size === 0) this.#listeners.delete(identifier)
+      if (listeners.size === 0) this.#listeners.delete(footnote)
     }
   }
 
   /**
-   * Reconcile with the latest parse. A settled footnote whose content differs
-   * from the stored one is written; the open one is left alone until it
-   * settles, so streaming it costs no renders; footnotes gone from the
-   * document are dropped. Only the changed identifiers notify.
+   * Reconcile with the latest render: a footnote whose content differs from
+   * the stored one is written, and footnotes gone from the document are
+   * dropped. Only the changed footnotes notify.
    */
-  sync({ settled, open }: Footnotes<ReactNode>): void {
+  sync(contents: ReadonlyMap<string, ReactNode>): void {
     const changed: string[] = []
-    for (const [identifier, content] of settled) {
-      if (this.#contents.get(identifier) === content) continue
-      this.#contents.set(identifier, content)
-      changed.push(identifier)
+    for (const [footnote, content] of contents) {
+      if (this.#contents.get(footnote) === content) continue
+      this.#contents.set(footnote, content)
+      changed.push(footnote)
     }
-    for (const identifier of this.#contents.keys()) {
-      if (identifier === open || settled.has(identifier)) continue
-      this.#contents.delete(identifier)
-      changed.push(identifier)
+    for (const footnote of this.#contents.keys()) {
+      if (contents.has(footnote)) continue
+      this.#contents.delete(footnote)
+      changed.push(footnote)
     }
-    for (const identifier of changed) {
-      for (const listener of this.#listeners.get(identifier) ?? []) listener()
+    for (const footnote of changed) {
+      for (const listener of this.#listeners.get(footnote) ?? []) listener()
     }
   }
 }
 
-/** Subscribe to one footnote's content in `store`. */
+const noop = () => {}
+
+/** Subscribe to one footnote's content in `store`, if there is a footnote. */
 export function useFootnote(
   store: FootnoteStore,
-  identifier: string,
+  footnote: string | undefined,
 ): ReactNode {
   const subscribe = useCallback(
-    (listener: Listener) => store.subscribe(identifier, listener),
-    [store, identifier],
+    (listener: Listener) =>
+      footnote === undefined ? noop : store.subscribe(footnote, listener),
+    [store, footnote],
   )
-  const read = () => store.get(identifier)
+  const read = () => (footnote === undefined ? undefined : store.get(footnote))
   return useSyncExternalStore(subscribe, read, read)
 }

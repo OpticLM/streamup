@@ -1,4 +1,3 @@
-import { normalizeIdentifier } from 'micromark-util-normalize-identifier'
 import type { ComponentType, ReactNode } from 'react'
 import {
   createContext,
@@ -8,7 +7,7 @@ import {
   useState,
 } from 'react'
 import { FootnoteStore, useFootnote } from './store.js'
-import type { FootnoteRefProps, Footnotes } from './types.js'
+import type { FootnoteRefProps } from './types.js'
 
 interface FootnoteContextValue {
   store: FootnoteStore
@@ -17,25 +16,25 @@ interface FootnoteContextValue {
 
 const FootnoteContext = createContext<FootnoteContextValue | null>(null)
 
-/** Identifiers of the footnotes whose content encloses the current subtree. */
+/** Numbers of the footnotes whose content encloses the current subtree. */
 const FootnoteTrail = createContext<readonly string[]>([])
 
 export interface FootnoteProviderProps {
-  /** The rendered footnotes of the latest parse. */
-  footnotes: Footnotes<ReactNode>
+  /** The rendered footnotes of the latest render, by number. */
+  footnotes: ReadonlyMap<string, ReactNode>
   /** Renders each reference: `components['footnote-ref']`. */
   component?: ComponentType<FootnoteRefProps>
   children?: ReactNode
 }
 
-/** Owns the footnote store of one document and feeds it every parse. */
+/** Owns the footnote store of one document and feeds it every render. */
 export function FootnoteProvider({
   footnotes,
   component,
   children,
 }: FootnoteProviderProps) {
-  // Seeded with the first parse, so the first (and server) render already
-  // shows every settled footnote; later parses sync after commit.
+  // Seeded with the first render, so the first (and server) render already
+  // shows every footnote; later renders sync after commit.
   const [store] = useState(() => new FootnoteStore(footnotes))
   useLayoutEffect(() => store.sync(footnotes), [store, footnotes])
   const value = useMemo(
@@ -45,23 +44,31 @@ export function FootnoteProvider({
   return <FootnoteContext value={value}>{children}</FootnoteContext>
 }
 
+export interface FootnoteRefElementProps {
+  label: string
+  /** The footnote's number, once Words has linked the reference to it. */
+  footnote?: string
+}
+
 /**
  * Stands in for every `<footnote-ref>` element: reads its footnote from the
  * store and hands it to `components['footnote-ref']`. A footnote that cites
  * itself, directly or not, renders that inner reference without content.
  */
-export function FootnoteRef({ label }: Pick<FootnoteRefProps, 'label'>) {
+export function FootnoteRef({ label, footnote }: FootnoteRefElementProps) {
   const { store, Component } = useFootnoteContext()
   const trail = useContext(FootnoteTrail)
-  // The identifier mdast-util-gfm-footnote derives from the same label.
-  const identifier = normalizeIdentifier(label).toLowerCase()
-  const content = useFootnote(store, identifier)
+  const content = useFootnote(store, footnote)
   if (!Component) return null
-  if (content === undefined || trail.includes(identifier))
+  if (
+    footnote === undefined ||
+    content === undefined ||
+    trail.includes(footnote)
+  )
     return <Component label={label} />
   return (
     <Component label={label}>
-      <FootnoteTrail value={[...trail, identifier]}>{content}</FootnoteTrail>
+      <FootnoteTrail value={[...trail, footnote]}>{content}</FootnoteTrail>
     </Component>
   )
 }

@@ -1,52 +1,71 @@
-import type { Element, Root } from 'hast'
+import type { Element, ElementContent, Root } from 'hast'
 import type { Plugin } from 'unified'
 import { SKIP, visit } from 'unist-util-visit'
 
 export const FOOTNOTE_REF_TAG = 'footnote-ref'
 
-const REFERENCE_SOURCE = /^\[\^(.+)\]$/
+/** GFM's footnote call: a label without whitespace or brackets. */
+const REFERENCE = /\[\^([^\s[\]]+)\]/g
 
-/**
- * Rehype plugin for inline footnote mode: turns each footnote reference
- * (`<sup><a data-footnote-ref>`) into a `<footnote-ref label="…">` element,
- * and drops the `<section data-footnotes>` that remark-rehype appends for
- * definitions in the same tree — inline mode shows footnotes at their
- * references instead.
- *
- * Runs after rehype-sanitize, which strips unknown properties but keeps
- * positions, so the label is read back from the source: the reference's
- * `href` only carries a URI-encoded, lowercased form of it.
- */
-export const rehypeInlineFootnotes: Plugin<[], Root> = () => (tree, file) => {
-  const source = String(file.value)
-  visit(tree, 'element', (node, index, parent) => {
-    if (!parent || index === undefined) return
-    if (
-      node.tagName === 'section' &&
-      node.properties.dataFootnotes !== undefined
-    ) {
-      parent.children.splice(index, 1)
-      return [SKIP, index]
-    }
-    const label =
-      node.tagName === 'sup' ? referenceLabel(node, source) : undefined
-    if (label === undefined) return
-    parent.children[index] = {
-      type: 'element',
-      tagName: FOOTNOTE_REF_TAG,
-      properties: { label },
-      children: [],
-    }
-    return SKIP
-  })
-}
+/** Elements whose text is code or drawing, never footnote syntax. */
+const LITERAL = new Set(['code', 'pre', 'svg'])
 
-function referenceLabel(sup: Element, source: string): string | undefined {
+const footnoteRef = (label: string, footnote?: string): Element => ({
+  type: 'element',
+  tagName: FOOTNOTE_REF_TAG,
+  properties: footnote === undefined ? { label } : { label, footnote },
+  children: [],
+})
+
+/** The number of the footnote a `<sup>` from Words links to, if it is a reference. */
+function linkedFootnote(sup: Element): string | undefined {
   const [link] = sup.children
   if (link?.type !== 'element' || link.properties.dataFootnoteRef === undefined)
     return undefined
-  const start = sup.position?.start.offset
-  const end = sup.position?.end.offset
-  if (start === undefined || end === undefined) return undefined
-  return REFERENCE_SOURCE.exec(source.slice(start, end))?.[1]
+  const href = link.properties.href
+  return typeof href === 'string' ? href.replace(/^#fn-/, '') : undefined
+}
+
+/** `[^label]` in `value` as text and unlinked references, or `undefined` if there is none. */
+function splitReferences(value: string): ElementContent[] | undefined {
+  const parts: ElementContent[] = []
+  let last = 0
+  for (const match of value.matchAll(REFERENCE)) {
+    if (match.index > last)
+      parts.push({ type: 'text', value: value.slice(last, match.index) })
+    parts.push(footnoteRef(match[1] ?? ''))
+    last = match.index + match[0].length
+  }
+  if (parts.length === 0) return undefined
+  if (last < value.length)
+    parts.push({ type: 'text', value: value.slice(last) })
+  return parts
+}
+
+/**
+ * Rehype plugin for inline footnote mode. Every reference becomes a
+ * `<footnote-ref label="…">` element:
+ *
+ * - one Words has linked to its footnote (`<sup><a data-footnote-ref>`) also
+ *   carries the footnote's number, and is labelled with it;
+ * - `[^label]` that Words left as text, because no definition has arrived
+ *   (yet), carries only its label.
+ */
+export const rehypeInlineFootnotes: Plugin<[], Root> = () => (tree) => {
+  visit(tree, (node, index, parent) => {
+    if (!parent || index === undefined) return
+    const siblings = parent.children as ElementContent[]
+    if (node.type === 'text') {
+      const parts = splitReferences(node.value)
+      if (!parts) return
+      siblings.splice(index, 1, ...parts)
+      return index + parts.length
+    }
+    if (node.type !== 'element') return
+    if (LITERAL.has(node.tagName)) return SKIP
+    const footnote = node.tagName === 'sup' ? linkedFootnote(node) : undefined
+    if (footnote === undefined) return
+    siblings[index] = footnoteRef(footnote, footnote)
+    return SKIP
+  })
 }

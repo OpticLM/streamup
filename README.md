@@ -2,6 +2,8 @@
 
 A headless React streaming markdown renderer. Pass it a Markdown string — change that string as often as you like — and it renders the HTML. No wrappers, no overrides to maintain: the output is plain semantic HTML you can style with [shadcn/typeset](https://ui.shadcn.com/docs/typeset).
 
+Markdown is parsed by [Words](https://diffs.com/words), Pierre's streaming Markdown renderer written in WebAssembly.
+
 ## Install
 
 ```sh
@@ -50,7 +52,9 @@ When `streaming` flips to `false` the buffer flushes instantly — the full docu
 </Streamup>
 ```
 
-Internally the buffer is split into blocks (paragraphs, code, lists, …); only the trailing block is healed on each tick, and unchanged blocks are cached, so per-tick cost stays flat as the buffer grows. One caveat: with the default footnote mode, documents with footnotes take a single whole-doc block (so the cache can't help) and re-render fully each committing tick — the cost is ~1.5× the old fixed throttle at 30 fps and is configurable via `tickMs`. [Inline footnotes](#footnotes) keep the blocks split.
+Internally a Words session renders the revealed text to HTML, keeping completed blocks and reparsing only the unfinished end. Streamup splits that HTML into its top-level blocks (paragraphs, code, lists, …) and caches the React element of each, so per-tick cost stays flat as the buffer grows. Once a footnote or link reference definition appears, Words renders the whole document on every tick; unchanged blocks still come from the cache.
+
+While streaming, a code fence that hasn't closed yet renders as `<pre data-markdown-incomplete>`, and a link still waiting for its URL as `<a data-markdown-incomplete>`, in case you want to style them.
 
 ## Code blocks
 
@@ -118,96 +122,32 @@ const components = useMemo(
 
 Memoize `components` so its identity stays stable — the streaming block cache keys on it.
 
-## KaTeX
+## Math
 
-```sh
-pnpm add katex
-```
+Math needs no extra package and no CSS: Words renders TeX to SVG.
 
 ```tsx
-import { Streamup } from '@opticlm/streamup'
-import { katex } from '@opticlm/streamup/katex'
-import 'katex/dist/katex.min.css'
-
-const plugins = useMemo(() => [katex()], [])
-
-<Streamup streaming plugins={plugins}>{'$$\nE = mc^2\n$$'}</Streamup>
+;<Streamup>
+  {
+    'Inline $e^{i\\pi} + 1 = 0$, and display:\n\n$$\n\\sum_{n=1}^\\infty \\frac{1}{n^2}\n$$'
+  }
+</Streamup>
 ```
 
-Math is always parsed. `katex()` renders it with KaTeX; on a TeX syntax error the raw source is shown as plain text. Display math is `$$` on its own line(s):
-- Block (display): `$$` on its own line(s) — `$$\nE = mc^2\n$$` — or a fenced ` ```math ` block.
-- Inline: `$x^2$` — enable with `singleDollarTextMath`. A single-line `$$x$$` is inline math in remark-math; use the multi-line form above for display.
+- Inline: `$x^2$`. As in Pandoc, the opening `$` needs a non-space after it, and the closing `$` a non-space before it and no digit after it, so `$5 and $10` stays text.
+- Display: `$$…$$`, a block from a line starting with `$$` to a line ending with `$$`, or a fenced ` ```math ` block.
 
-### Why `katex.min.css` is required
+Each formula is an `<svg role="img" aria-label="…TeX…">` drawn in `currentColor`, inline or as a centered block. Glyphs come from the system math font; the layout uses the metrics of STIX Two Math, which Apple systems include, and other math fonts work with small spacing differences. A formula Words cannot lay out shows as code.
 
-KaTeX renders TeX into HTML with its own class names (`.katex`, `.katex-display`, `.base`, `.mfrac`, etc.) and loads custom fonts for math symbols (KaTeX_Main, KaTeX_Math, KaTeX_AMS, KaTeX_Size1–4, …). The CSS file provides:
-- `@font-face` declarations for all 13 KaTeX font families.
-- Layout and spacing for fractions, superscripts/subscripts, delimiters, matrices, accents, etc.
-- Screen-reader accessibility.
-- ...
-
-### Which CSS file to import
-
-KaTeX ships several CSS variants in `node_modules/katex/dist/`:
-
-| File                 | When to use                                                                                                                                                                               |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `katex.min.css`      | **Default.** `font-display: block` — the browser hides text until the KaTeX font loads, then swaps in. Avoids a flash of unstyled text (FOUT) at the cost of a short invisible period.    |
-| `katex.css`          | Same as above but unminified (useful for debugging).                                                                                                                                      |
-| `katex-swap.min.css` | `font-display: swap` — the browser shows a fallback font immediately and swaps to KaTeX when it loads. Better perceived performance on slow connections; may cause a visible style shift. |
-| `katex-swap.css`     | Same as above, unminified.                                                                                                                                                                |
-
-Import **one** of them — that's all that's needed. If you're unsure, use `katex.min.css`.
-
-You can also skip the bundled CSS entirely and write your own styles for the KaTeX classes (see below), or import the CSS in a different way (via a CSS bundler `@import`, a `<link>` tag from a CDN, etc.).
-
-### Display math DOM structure
-
-When KaTeX renders a display-math block, the output HTML structure placed into the document is:
-
-```html
-<span class="katex-display">
-  <span class="katex">
-    <!-- MathML for screen readers, visually hidden -->
-    <span class="katex-mathml">…</span>
-    <span class="katex-html" aria-hidden="true">
-      <!-- one or more inline-blocks per line of math -->
-      <span class="base">…</span>
-    </span>
-  </span>
-</span>
-```
-
-KaTeX's default CSS styles these as:
-
-| Selector                                | CSS                                                       | Role                                |
-| --------------------------------------- | --------------------------------------------------------- | ----------------------------------- |
-| `.katex-display`                        | `display: block; margin: 1em 0; text-align: center`       | Outer block wrapper                 |
-| `.katex-display > .katex`               | `display: block; text-align: center; white-space: nowrap` | Internal block container            |
-| `.katex-display > .katex > .katex-html` | `display: block; position: relative`                      | Visible rendered output             |
-| `.katex .base`                          | `display: inline-block; width: min-content`               | Each line of math                   |
-| `.katex .katex-mathml`                  | `position: absolute; clip-path: inset(50%)`               | Visually hidden, accessibility only |
-
-All three wrapper levels (`.katex-display`, `.katex`, `.katex-html`) are `display: block` and each takes 100% width of its parent. The math content (the `.base` inline-blocks) is centered by `text-align: center` inherited from `.katex`.
-
-### Customizing margins and centering
-
-Since the KaTeX classes are plain CSS, override them directly. To control the display block's outer spacing:
+STIX Two has a small x-height, so math reads small next to sans-serif text. Scale it up as KaTeX does:
 
 ```css
-.katex-display {
-  margin: 1.5em 2rem;
-  text-align: left;
+.typeset svg[font-family*="Math"] {
+  font-size: 1.3em;
 }
 ```
 
-To adjust the base math font size:
-
-```css
-.katex {
-  font-size: 1.1em;
-}
-```
+Pass `math={false}` to leave dollar signs as text.
 
 ## Mermaid
 
@@ -314,7 +254,7 @@ const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
 
 ## Footnotes
 
-By default footnotes render the GFM way: numbered references linking to a `<section data-footnotes>` at the end of the document. Linking needs the whole document in one tree, so once a footnote appears the document renders as a single block.
+By default footnotes render the GFM way: numbered references linking to a `<section data-footnotes>` at the end of the document. A reference shows as `[^label]` text until its definition arrives.
 
 `footnotes="inline"` drops that section and renders every reference through your `footnote-ref` component, which receives the footnote's content — for a tooltip, a popover, a sidenote:
 
@@ -337,27 +277,25 @@ const components = useMemo(
 </Streamup>
 ```
 
-`label` is the label as written (`note` for `[^note]`). `children` is the rendered footnote content, `undefined` until its definition has streamed in — or for good, if the document never defines the label. The content is block-level (a definition renders as `<p>…</p>`) while the reference sits inside a paragraph, so render it where blocks are allowed, such as a popover portal, rather than straight into the text. In inline mode you **must** map `footnote-ref`.
+`label` is the footnote's number once its definition has arrived, as GFM shows it, and the label as written (`note` for `[^note]`) before that. `children` is the rendered footnote content, `undefined` until its definition starts streaming in — or for good, if the document never defines the label. The content is block-level (a definition renders as `<p>…</p>`) while the reference sits inside a paragraph, so render it where blocks are allowed, such as a popover portal, rather than straight into the text. In inline mode you **must** map `footnote-ref`.
 
-Inline mode keeps streaming cheap. Every `[^label]` parses as a reference on its own, so the body splits into blocks as usual and never re-renders for a footnote. The definitions feed a footnote store, and each reference subscribes to its own footnote. While the footnote section streams in, the definition being written is left alone until the stream moves past it (or ends); every earlier definition updates only when its content differs from the store's. In an append-only stream, each reference therefore re-renders once, when its footnote is complete. An unfinished `[^label` at the end of the stream is held back instead of flashing as text.
-
-Only top-level definitions are picked up; one nested in a container such as a blockquote is dropped in inline mode.
+Every `[^label]` renders as a reference from the start, so no footnote syntax flashes as text: an unfinished `[^label` or definition opening at the end of the stream is held back. The definitions feed a footnote store, and each reference subscribes to its own footnote, so a footnote's content streams into its references while the rest of the document stays untouched.
 
 ## Props
 
-| Prop                   | Type                      | Default     | Description                                                                                                                                                                                                   |
-| ---------------------- | ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `children`             | `string`                  | `''`        | Markdown content                                                                                                                                                                                              |
-| `streaming`            | `boolean`                 | `false`     | Heal incomplete markdown and enable adaptive typewriter pacing (unless `pacing={false}`)                                                                                                                      |
-| `pacing`               | `PacingConfig \| boolean` | `undefined` | Adaptive typewriter pacing. `false` (or `tickMs <= 0`) disables it; `undefined` follows `streaming`; an object tunes the leaky bucket (`tickMs`, `low`, `high`, `slowCps`, `normCps`, `fastCps`, `scaleFast`) |
-| `components`           | `StreamupComponents`      | —           | Map hast tag names (and custom elements like `code-block`) to React components                                                                                                                                |
-| `plugins`              | `StreamupPlugin[]`        | `[]`        | Add remark/rehype plugins (e.g. `katex()`)                                                                                                                                                                    |
-| `singleDollarTextMath` | `boolean`                 | `false`     | Enable `$...$` inline math syntax                                                                                                                                                                             |
-| `footnotes`            | `'section' \| 'inline'`   | `'section'` | Render footnotes as a trailing GFM section, or [inline](#footnotes) through `components['footnote-ref']`                                                                                                      |
+| Prop         | Type                      | Default     | Description                                                                                                                                                                                                   |
+| ------------ | ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `children`   | `string`                  | `''`        | Markdown content                                                                                                                                                                                              |
+| `streaming`  | `boolean`                 | `false`     | Heal incomplete markdown and enable adaptive typewriter pacing (unless `pacing={false}`)                                                                                                                      |
+| `pacing`     | `PacingConfig \| boolean` | `undefined` | Adaptive typewriter pacing. `false` (or `tickMs <= 0`) disables it; `undefined` follows `streaming`; an object tunes the leaky bucket (`tickMs`, `low`, `high`, `slowCps`, `normCps`, `fastCps`, `scaleFast`) |
+| `components` | `StreamupComponents`      | —           | Map hast tag names (and custom elements like `code-block`) to React components                                                                                                                                |
+| `plugins`    | `StreamupPlugin[]`        | `[]`        | Add rehype plugins (e.g. `mermaid()`)                                                                                                                                                                         |
+| `math`       | `boolean`                 | `true`      | Render [math](#math) as SVG                                                                                                                                                                                   |
+| `footnotes`  | `'section' \| 'inline'`   | `'section'` | Render footnotes as a trailing GFM section, or [inline](#footnotes) through `components['footnote-ref']`                                                                                                      |
 
 ## Plugins
 
-Add any remark/rehype plugin via `plugins`:
+Add any rehype plugin via `plugins`. It runs on the HAST of each block Words renders. There is no Markdown syntax tree, so remark plugins don't apply.
 
 ```tsx
 import type { StreamupPlugin } from '@opticlm/streamup'
@@ -367,11 +305,13 @@ const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugi
 <Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
 ```
 
-When combining `katex()`, `mermaid()`, and `codeBlocks()`, list them in that order: each plugin transforms only its target blocks and leaves the rest for the next. `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
+When combining `mermaid()` and `codeBlocks()`, list them in that order: `mermaid` transforms only mermaid fences and leaves the rest, while `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
 
 ## What's parsed by default
 
-GFM, math, raw HTML (sanitized), and correct emphasis/strikethrough/autolinks for CJK text.
+CommonMark and GFM (tables, task lists, strikethrough, autolinks, footnotes), math, and correct emphasis/strikethrough/autolinks for CJK text.
+
+Raw HTML is not rendered: its tags are dropped and their text stays, so `H<sub>2</sub>O` reads `H2O` and `<kbd>Ctrl</kbd>` reads `Ctrl`. Links and images keep only `http`, `https` and relative URLs (links also `mailto`, `tel`, `xmpp`, `irc`, `ircs`).
 
 ## Responsive tables
 
@@ -418,8 +358,6 @@ const plugins = useMemo(() => [{ rehypePlugins: [rehypeScrollTables] }], [])
 
 <Streamup streaming plugins={plugins}>{markdown}</Streamup>
 ```
-
-Plugins from `plugins` run _after_ the built-in `rehype-sanitize`, so the wrapper `<div>` is never stripped.
 
 It works for any wide block, not just tables, so that you could widen the condition to wrap `pre` too:
 

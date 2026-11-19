@@ -1,11 +1,10 @@
+import { createHtmlSession } from '@pierre/words'
 import type { ReactNode } from 'react'
-import { Fragment, useMemo, useRef } from 'react'
-import type { PluggableList } from 'unified'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { FootnoteProvider, FootnoteRef } from './footnote/footnote-ref.js'
 import { FOOTNOTE_REF_TAG } from './footnote/rehype-inline-footnotes.js'
-import type { Footnotes } from './footnote/types.js'
-import { splitBlocks } from './parse/blocks.js'
-import type { MdProcessor } from './parse/processor.js'
+import { holdPendingFootnote, splitDocument } from './parse/blocks.js'
+import type { BlockProcessor } from './parse/processor.js'
 import { createProcessor, renderBlock } from './parse/processor.js'
 import type { PacingConfig, StreamupProps } from './types.js'
 import type { PacingOptions } from './usePacedStream.js'
@@ -47,7 +46,7 @@ export function Streamup({
   pacing,
   components,
   plugins,
-  singleDollarTextMath,
+  math = true,
   footnotes = 'section',
 }: StreamupProps) {
   const markdown = children ?? ''
@@ -59,29 +58,25 @@ export function Streamup({
   // More is coming until the stream ends and pacing has revealed all of it.
   const live = streaming || source !== markdown
 
-  const extraRemarkPlugins = useMemo<PluggableList>(
-    () => (plugins ?? []).flatMap((p) => p.remarkPlugins ?? []),
-    [plugins],
+  // A Words session keeps the completed HTML and reparses only the end.
+  const [session] = useState(createHtmlSession)
+  const html = useMemo(() => {
+    const input =
+      live && footnotes === 'inline' ? holdPendingFootnote(source) : source
+    return session.render(input, { incomplete: live, cjk: true, math }).html
+  }, [session, source, live, math, footnotes])
+  const { blocks, footnotes: definitions } = useMemo(
+    () => splitDocument(html, footnotes),
+    [html, footnotes],
   )
-  const extraRehypePlugins = useMemo<PluggableList>(
+
+  const rehypePlugins = useMemo(
     () => (plugins ?? []).flatMap((p) => p.rehypePlugins ?? []),
     [plugins],
   )
-
-  const processor = useMemo<MdProcessor>(
-    () =>
-      createProcessor({
-        extraRemarkPlugins,
-        extraRehypePlugins,
-        singleDollarTextMath,
-        footnotes,
-      }),
-    [extraRemarkPlugins, extraRehypePlugins, singleDollarTextMath, footnotes],
-  )
-
-  const { blocks, footnotes: definitions } = useMemo(
-    () => splitBlocks(source, processor, { live, footnotes }),
-    [source, processor, live, footnotes],
+  const processor = useMemo<BlockProcessor>(
+    () => createProcessor({ rehypePlugins, footnotes }),
+    [rehypePlugins, footnotes],
   )
 
   const renderComponents = useMemo(
@@ -110,26 +105,23 @@ export function Streamup({
     }
     const cache = cacheRef.current.map
     const next = new Map<string, ReactNode>()
-    const render = (md: string) => {
+    const render = (block: string) => {
       const element =
-        cache.get(md) ??
-        renderBlock(md, { processor, components: renderComponents })
-      next.set(md, element)
+        cache.get(block) ??
+        renderBlock(block, { processor, components: renderComponents })
+      next.set(block, element)
       return element
     }
     // Footnote contents share the cache, so an unchanged definition renders
     // to the very same element and the store sees no change.
     const result = {
       blocks: blocks.map(render),
-      footnotes: {
-        settled: new Map(
-          Array.from(definitions.settled, ([id, content]) => [
-            id,
-            render(content),
-          ]),
-        ),
-        open: definitions.open,
-      } satisfies Footnotes<ReactNode>,
+      footnotes: new Map(
+        Array.from(definitions, ([footnote, content]) => [
+          footnote,
+          render(content),
+        ]),
+      ),
     }
     cacheRef.current.map = next
     return result

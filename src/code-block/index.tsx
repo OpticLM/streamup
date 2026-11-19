@@ -18,9 +18,8 @@ interface Replacement {
  * into a custom `<code-block language="x" code="…">` element. Map it via
  * `components['code-block']` so your component receives a clean
  * `{ language, code }` contract instead of digging through the hast node.
- * Runs after `rehype-sanitize`, so the custom element survives. Inline
- * `<code>` is left untouched. When combining with `katex()` or `rehypeMermaid()`,
- * list those first — this plugin consumes every remaining fenced block.
+ * Inline `<code>` is left untouched. When combining with `rehypeMermaid()`,
+ * list it first — this plugin consumes every remaining fenced block.
  */
 export const rehypeCodeBlocks: Plugin<[], Root, Root> = () => (tree) => {
   const replacements: Replacement[] = []
