@@ -110,7 +110,7 @@ describe('CodeBlock', () => {
 
   it('fills <code> with a Words highlighter', () => {
     expect(highlighted('const a = 1\n', 'ts')).toMatch(
-      /^<pre><code class="language-ts"><span style="color:#[0-9a-f]+">const <\/span>.*<\/code><\/pre>$/s,
+      /^<pre><code class="language-ts"><span><span style="color:#[0-9a-f]+">const <\/span>.*<\/span><\/code><\/pre>$/s,
     )
   })
 

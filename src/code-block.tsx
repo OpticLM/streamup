@@ -1,4 +1,5 @@
 import type { CodeHighlighterPlugin, CodeOptions } from '@pierre/words/html'
+import type { ReactNode } from 'react'
 
 /**
  * Props of `components['code-block']`: one fenced code block, in the shape
@@ -8,8 +9,11 @@ import type { CodeHighlighterPlugin, CodeOptions } from '@pierre/words/html'
  *   streaming, the last line has no LF until it is complete.
  * - `language`: the first word of the info string, or `''`.
  * - `isIncomplete`: the fence is still open and more text is coming.
+ * - `children`: the caret, while the stream ends in this block and
+ *   `Streamup`'s `caret` is on. Render it at the end of the code, or leave
+ *   it out.
  */
-export type CodeBlockProps = CodeOptions
+export type CodeBlockProps = CodeOptions & { children?: ReactNode }
 
 export interface CodeBlockRendererProps extends CodeBlockProps {
   /**
@@ -30,20 +34,28 @@ export function CodeBlock({
   language,
   isIncomplete,
   highlighter,
+  children,
 }: CodeBlockRendererProps) {
+  // A caret sits at the end of the last line rather than on a new one, so
+  // the block does not lose a line when the fence closes.
+  const text =
+    children != null && code.endsWith('\n') ? code.slice(0, -1) : code
   const className = language ? `language-${language}` : undefined
-  const html = highlighter?.highlight({ code, language, isIncomplete }) ?? null
+  const html =
+    highlighter?.highlight({ code: text, language, isIncomplete }) ?? null
   return (
     <pre data-markdown-incomplete={isIncomplete ? '' : undefined}>
-      {html === null ? (
-        <code className={className}>{code}</code>
-      ) : (
-        <code
-          className={className}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: a highlighter returns escaped code wrapped in its own spans
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      )}
+      <code className={className}>
+        {html === null ? (
+          text
+        ) : (
+          <span
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: a highlighter returns escaped code wrapped in its own spans
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
+        {children}
+      </code>
     </pre>
   )
 }

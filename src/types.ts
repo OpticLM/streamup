@@ -3,6 +3,9 @@ import type * as React from 'react'
 import type { ComponentType } from 'react'
 import type { CodeBlockProps } from './code-block.js'
 import type { FootnoteMode, FootnoteRefProps } from './footnote/types.js'
+import type { CaretShape } from './parse/streaming.js'
+
+export type { CaretShape }
 
 /**
  * Map tag names to React components, passed to `Streamup` as `components`.
@@ -65,4 +68,16 @@ export interface StreamupProps {
    * content, keeping the body's blocks independent of the footnote section.
    */
   footnotes?: FootnoteMode
+  /**
+   * Fade in new text while streaming, as Words does: each arrival is wrapped
+   * in `<span data-markdown="token">` until the stream ends. Code blocks do
+   * not fade. Needs `@opticlm/streamup/styles.css`. Default `false`.
+   */
+  animated?: boolean
+  /**
+   * Show a caret where text arrives while streaming: a zero-width
+   * `<span data-markdown="caret" data-shape>` whose glyph comes from
+   * `@opticlm/streamup/styles.css`. Off by default.
+   */
+  caret?: CaretShape
 }

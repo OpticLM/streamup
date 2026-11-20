@@ -4,7 +4,7 @@
   "description": "A lightweight, headless React streaming markdown renderer",
   "type": "module",
   "types": "dist/index.d.mts",
-  "sideEffects": false,
+  "sideEffects": ["*.css"],
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -17,9 +17,10 @@
     "./pele": {
       "types": "./dist/pele/index.d.mts",
       "default": "./dist/pele/index.mjs"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
-  "files": ["dist/**/*.mjs", "dist/**/*.d.mts", "LICENSE"],
+  "files": ["dist/**/*.mjs", "dist/**/*.d.mts", "dist/styles.css", "LICENSE"],
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",

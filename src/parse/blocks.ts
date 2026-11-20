@@ -13,6 +13,10 @@ const VOID = /<(?:br|hr|img|input)[\s/>]/y
 /** The section Words appends for footnote definitions. */
 const FOOTNOTE_SECTION = '<section class="footnotes" data-footnotes>'
 
+/** Whether `block` is the footnote section Words appends. */
+export const isFootnoteSection = (block: string): boolean =>
+  block.startsWith(FOOTNOTE_SECTION)
+
 const FOOTNOTE_ITEM = /^<li id="fn-([^"]+)">/
 
 /** A footnote's links back to its references, which only the section needs. */
@@ -55,7 +59,7 @@ export function splitDocument(
 ): SplitDocument {
   const blocks = splitHtml(html)
   const section = blocks.at(-1)
-  if (footnotes === 'section' || !section?.startsWith(FOOTNOTE_SECTION))
+  if (footnotes === 'section' || !section || !isFootnoteSection(section))
     return { blocks, footnotes: new Map() }
   blocks.pop()
   const list = section.slice(

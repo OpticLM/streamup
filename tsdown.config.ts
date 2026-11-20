@@ -2,6 +2,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: ['src/index.ts', 'src/mermaid/index.tsx', 'src/pele/index.tsx'],
+  copy: ['src/styles.css'],
   format: ['esm'],
   minify: true,
   dts: true,

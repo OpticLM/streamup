@@ -56,6 +56,32 @@ Internally a Words session renders the revealed text to HTML, keeping completed 
 
 While streaming, a code fence that hasn't closed yet renders as `<pre data-markdown-incomplete>`, and a link still waiting for its URL as `<a data-markdown-incomplete>`, in case you want to style them.
 
+## Streaming effects
+
+Fade in new text and show a caret where it arrives, as [Words](https://diffs.com/words) does. Both are off by default and come with a small stylesheet:
+
+```tsx
+import '@opticlm/streamup/styles.css'
+
+;<div className="typeset typeset-chat">
+  <Streamup streaming animated caret="block">
+    {markdown}
+  </Streamup>
+</div>
+```
+
+- `animated` wraps each arrival of text in `<span data-markdown="token">`, which fades in over 180 ms. Code blocks and math don't fade.
+- `caret` (`'block'` or `'circle'`) adds a zero-width `<span data-markdown="caret" aria-hidden="true">` at the end of the text: inside the deepest last block, or at the end of the last line of a streaming code block. Its glyph is CSS content, so copied text never includes it.
+- Both exist only while more text is coming. Once the stream ends and pacing has revealed all of it, Streamup renders the plain HTML again, exactly as without them.
+
+With pacing on, each tick's few characters fade in turn, a soft trail behind the newest text; with `pacing={false}`, each chunk you pass fades as a whole. `prefers-reduced-motion: reduce` turns both animations off, and `--streamup-fade-duration` changes the fade:
+
+```css
+.typeset {
+  --streamup-fade-duration: 300ms;
+}
+```
+
 ## Code blocks
 
 Inline code is native `<code>`. Every fenced code block renders through `components['code-block']`, which receives the block in the shape Words hands its own code plugins (`CodeOptions`):
@@ -114,6 +140,8 @@ const components = {
 ```
 
 Keep `components` stable — define it outside the component, or memoize it — since the streaming block cache keys on it.
+
+With [`caret`](#streaming-effects) on, a code block the stream ends in receives the caret as `children`. `CodeBlock` draws it at the end of the code; render `children` there too to keep it in your own component.
 
 These props are Words' `CodeOptions`, so a renderer written for Words' `plugins.renderers` takes them as they are: call its `render(props)` from your component and set the HTML it returns.
 
@@ -276,6 +304,8 @@ Every `[^label]` renders as a reference from the start, so no footnote syntax fl
 | `components` | `StreamupComponents`      | —           | Map tag names to React components, including Streamup's own [`code-block`](#code-blocks) and [`footnote-ref`](#footnotes)                                                                                     |
 | `math`       | `boolean`                 | `true`      | Render [math](#math) as SVG                                                                                                                                                                                   |
 | `footnotes`  | `'section' \| 'inline'`   | `'section'` | Render footnotes as a trailing GFM section, or [inline](#footnotes) through `components['footnote-ref']`                                                                                                      |
+| `animated`   | `boolean`                 | `false`     | While streaming, fade in each arrival of text ([streaming effects](#streaming-effects))                                                                                                                       |
+| `caret`      | `'block' \| 'circle'`     | —           | While streaming, show a caret where text arrives ([streaming effects](#streaming-effects))                                                                                                                    |
 
 ## Customizing the output
 
