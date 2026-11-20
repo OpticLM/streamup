@@ -2,10 +2,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { codeBlocks } from './code-block/index.js'
-import type { CodeBlockProps } from './code-block/types.js'
 import type { FootnoteRefProps } from './footnote/types.js'
-import { extractLanguage, findCode, textOf } from './parse/processor.js'
 import { Streamup } from './streamup.js'
 
 describe('Streamup', () => {
@@ -62,63 +59,21 @@ describe('Streamup', () => {
     expect(html).toContain('<table>')
   })
 
-  it('enables single dollar math with singleDollarTextMath', () => {
+  it('renders math as SVG unless math is off', () => {
     const md = 'Inline $x^2$ math'
-    const html = renderToStaticMarkup(
-      createElement(Streamup, { singleDollarTextMath: true }, md),
+    expect(renderToStaticMarkup(createElement(Streamup, null, md))).toContain(
+      '<svg',
     )
-    expect(html).toContain('math')
+    expect(
+      renderToStaticMarkup(createElement(Streamup, { math: false }, md)),
+    ).toBe('<p>Inline $x^2$ math</p>')
   })
 
-  it('sanitizes raw HTML', () => {
+  it('omits raw HTML', () => {
     const html = renderToStaticMarkup(
       createElement(Streamup, null, '<script>alert("xss")</script>'),
     )
     expect(html).not.toContain('<script>')
-  })
-
-  it('renders a code-block component mapped via rehypeCodeBlocks', () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        Streamup,
-        {
-          plugins: [codeBlocks()],
-          components: {
-            'code-block': ({ language, code }: CodeBlockProps) =>
-              createElement('pre', { 'data-lang': language }, code),
-          },
-        },
-        '```js\nconst x = 1\n```',
-      ),
-    )
-    expect(html).toContain('data-lang="js"')
-    expect(html).toContain('const x = 1')
-  })
-
-  it('supports overriding pre directly via components (native path)', () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        Streamup,
-        {
-          components: {
-            pre: ({ node, children }) => {
-              const code = node ? findCode(node) : undefined
-              if (code) {
-                return createElement(
-                  'pre',
-                  { 'data-lang': extractLanguage(code.properties?.className) },
-                  textOf(code),
-                )
-              }
-              return createElement('pre', null, children)
-            },
-          },
-        },
-        '```js\nconst x = 1\n```',
-      ),
-    )
-    expect(html).toContain('data-lang="js"')
-    expect(html).toContain('const x = 1')
   })
 
   it('renders native pre>code with language class by default', () => {
@@ -128,24 +83,6 @@ describe('Streamup', () => {
     expect(html).toContain('language-js')
     expect(html).toContain('const x = 1')
     expect(html).toContain('<pre>')
-  })
-
-  it('handles unlabeled fenced code via rehypeCodeBlocks', () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        Streamup,
-        {
-          plugins: [codeBlocks()],
-          components: {
-            'code-block': ({ language, code }: CodeBlockProps) =>
-              createElement('div', { 'data-lang': language || 'none' }, code),
-          },
-        },
-        '```\nplain code\n```',
-      ),
-    )
-    expect(html).toContain('data-lang="none"')
-    expect(html).toContain('plain code')
   })
 })
 
@@ -181,11 +118,11 @@ describe('Streamup streaming', () => {
   })
 
   it('heals trailing unclosed block math', () => {
-    const md = 'intro\n\n$$E=mc^2'
+    const md = 'intro\n\n$$\nE=mc^2'
     const html = renderToStaticMarkup(
       createElement(Streamup, { streaming: true }, md),
     )
-    expect(html).toContain('math')
+    expect(html).toMatch(/<svg [^>]*aria-label="E=mc\^2/)
   })
 
   it('leaves mid-buffer unclosed syntax alone', () => {
@@ -674,7 +611,16 @@ describe('Streamup inline footnotes', () => {
     )
   })
 
-  it('streams the footnote section without touching the body, settling each footnote once', () => {
+  it('labels a reference as written until its definition arrives', () => {
+    expect(html('Body[^note].')).toBe(
+      '<p>Body<span data-note="note">?</span>.</p>',
+    )
+    expect(html('Body[^note].\n\n[^note]: Def.')).toBe(
+      '<p>Body<span data-note="1"><p>Def.</p></span>.</p>',
+    )
+  })
+
+  it('streams each footnote into its reference without touching the body', () => {
     const md = 'Alpha[^1].\n\nBeta[^2].\n\n[^1]: One.\n\n[^2]: Two.'
     const { log, components } = recordNotes()
     const props = {
@@ -691,15 +637,15 @@ describe('Streamup inline footnotes', () => {
     for (let end = bodyEnd + 1; end <= md.length; end++) {
       rerender(createElement(Streamup, props, md.slice(0, end)))
     }
-    // [^2] is still being written: it waits for the stream to end.
-    expect(log).toEqual([['1', '<p>One.</p>']])
+    // A reference renders only when its own footnote's content changes.
+    const notes = ['O', 'On', 'One', 'One.', 'T', 'Tw', 'Two', 'Two.']
+    expect(log).toEqual(
+      notes.map((note, i) => [i < 4 ? '1' : '2', `<p>${note}</p>`]),
+    )
     expect([...container.children]).toEqual(body)
 
     rerender(createElement(Streamup, { ...props, streaming: false }, md))
-    expect(log).toEqual([
-      ['1', '<p>One.</p>'],
-      ['2', '<p>Two.</p>'],
-    ])
+    expect(log).toHaveLength(notes.length)
     expect([...container.children]).toEqual(body)
   })
 
@@ -720,7 +666,7 @@ describe('Streamup inline footnotes', () => {
     }
   })
 
-  it('settles the last footnote once pacing has revealed the whole document', () => {
+  it('shows a footnote once pacing has revealed it', () => {
     vi.useFakeTimers()
     try {
       const { log, components } = recordNotes()

@@ -1,0 +1,47 @@
+/*
+ * Streaming effects of @opticlm/streamup, the same as Words' own:
+ * `animated` fades in each arrival of text, and `caret` marks where text
+ * arrives. Both exist only while streaming. Set `--streamup-fade-duration`
+ * to change the fade (default 180ms).
+ */
+
+[data-markdown="token"] {
+  animation: streamup-fade-in var(--streamup-fade-duration, 180ms) ease-out
+    backwards;
+}
+
+/* Zero width: a moving caret must not change line widths. */
+[data-markdown="caret"] {
+  display: inline-block;
+  width: 0;
+  user-select: none;
+  animation: streamup-caret 1s steps(2, start) infinite;
+}
+
+/* The glyph is CSS content, so the caret never adds text to copied content. */
+[data-markdown="caret"]::after {
+  content: "\258d";
+}
+
+[data-markdown="caret"][data-shape="circle"]::after {
+  content: "\25cf";
+}
+
+@keyframes streamup-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes streamup-caret {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-markdown="token"],
+  [data-markdown="caret"] {
+    animation: none;
+  }
+}

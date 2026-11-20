@@ -1,13 +1,24 @@
+import { createHtmlSession } from '@pierre/words'
 import type { ReactNode } from 'react'
-import { Fragment, useMemo, useRef } from 'react'
-import type { PluggableList } from 'unified'
+import { Fragment, useMemo, useRef, useState } from 'react'
+import { CodeBlock } from './code-block.js'
 import { FootnoteProvider, FootnoteRef } from './footnote/footnote-ref.js'
-import { FOOTNOTE_REF_TAG } from './footnote/rehype-inline-footnotes.js'
-import type { Footnotes } from './footnote/types.js'
-import { splitBlocks } from './parse/blocks.js'
-import type { MdProcessor } from './parse/processor.js'
-import { createProcessor, renderBlock } from './parse/processor.js'
-import type { PacingConfig, StreamupProps } from './types.js'
+import { FOOTNOTE_REF_TAG } from './footnote/inline-footnotes.js'
+import {
+  holdPendingFootnote,
+  isFootnoteSection,
+  settleOpenFence,
+  splitDocument,
+} from './parse/blocks.js'
+import { CODE_BLOCK_TAG } from './parse/code-blocks.js'
+import { renderBlock } from './parse/render-block.js'
+import type { Fading } from './parse/streaming.js'
+import { fadeIn, placeCaret, shown } from './parse/streaming.js'
+import type {
+  PacingConfig,
+  StreamupComponents,
+  StreamupProps,
+} from './types.js'
 import type { PacingOptions } from './usePacedStream.js'
 import { usePacedStream } from './usePacedStream.js'
 
@@ -46,9 +57,10 @@ export function Streamup({
   streaming = false,
   pacing,
   components,
-  plugins,
-  singleDollarTextMath,
+  math = true,
   footnotes = 'section',
+  animated = false,
+  caret,
 }: StreamupProps) {
   const markdown = children ?? ''
   const pacingOptions = useMemo(
@@ -59,81 +71,109 @@ export function Streamup({
   // More is coming until the stream ends and pacing has revealed all of it.
   const live = streaming || source !== markdown
 
-  const extraRemarkPlugins = useMemo<PluggableList>(
-    () => (plugins ?? []).flatMap((p) => p.remarkPlugins ?? []),
-    [plugins],
-  )
-  const extraRehypePlugins = useMemo<PluggableList>(
-    () => (plugins ?? []).flatMap((p) => p.rehypePlugins ?? []),
-    [plugins],
-  )
-
-  const processor = useMemo<MdProcessor>(
-    () =>
-      createProcessor({
-        extraRemarkPlugins,
-        extraRehypePlugins,
-        singleDollarTextMath,
-        footnotes,
-      }),
-    [extraRemarkPlugins, extraRehypePlugins, singleDollarTextMath, footnotes],
-  )
-
+  // A Words session keeps the completed HTML and reparses only the end.
+  const [session] = useState(createHtmlSession)
+  const html = useMemo(() => {
+    const input =
+      live && footnotes === 'inline' ? holdPendingFootnote(source) : source
+    const { html } = session.render(input, {
+      incomplete: live,
+      cjk: true,
+      math,
+    })
+    return settleOpenFence(html, input, live)
+  }, [session, source, live, math, footnotes])
   const { blocks, footnotes: definitions } = useMemo(
-    () => splitBlocks(source, processor, { live, footnotes }),
-    [source, processor, live, footnotes],
+    () => splitDocument(html, footnotes),
+    [html, footnotes],
   )
 
-  const renderComponents = useMemo(
-    () =>
-      footnotes === 'inline'
-        ? { ...components, [FOOTNOTE_REF_TAG]: FootnoteRef }
-        : components,
+  const renderComponents = useMemo<StreamupComponents>(
+    () => ({
+      [CODE_BLOCK_TAG]: CodeBlock,
+      ...components,
+      ...(footnotes === 'inline' && { [FOOTNOTE_REF_TAG]: FootnoteRef }),
+    }),
     [components, footnotes],
   )
 
+  // Streaming effects exist only while more text is coming, so the finished
+  // document is the same HTML as without them.
+  const fade = animated && live
+  const shape = live ? caret : undefined
+  // The caret goes into the last block of the body, not the footnote section.
+  let caretAt = shape === undefined ? -1 : blocks.length - 1
+  while (caretAt >= 0 && isFootnoteSection(blocks[caretAt] ?? '')) caretAt--
+
+  // A block's element depends on its HTML, on `renderComponents` (which also
+  // changes with `footnotes`), and on whether text fades. When either of the
+  // last two changes, the cache starts over: once the stream ends, every
+  // block renders again without its fade spans.
   const cacheRef = useRef({
-    processor,
     components: renderComponents,
+    fade,
     map: new Map<string, ReactNode>(),
+    fading: new Map<string, Fading>(),
   })
   const rendered = useMemo(() => {
+    let onScreen: ReadonlyMap<string, ReactNode> | undefined
     if (
-      cacheRef.current.processor !== processor ||
-      cacheRef.current.components !== renderComponents
+      cacheRef.current.components !== renderComponents ||
+      cacheRef.current.fade !== fade
     ) {
+      // Text already on screen does not fade in again.
+      if (fade) onScreen = cacheRef.current.map
       cacheRef.current = {
-        processor,
         components: renderComponents,
-        map: new Map<string, ReactNode>(),
+        fade,
+        map: new Map(),
+        fading: new Map(),
       }
     }
-    const cache = cacheRef.current.map
+    const { map: cache, fading } = cacheRef.current
     const next = new Map<string, ReactNode>()
-    const render = (md: string) => {
-      const element =
-        cache.get(md) ??
-        renderBlock(md, { processor, components: renderComponents })
-      next.set(md, element)
+    const nextFading = new Map<string, Fading>()
+    // `place` names where the block is, which its fade state belongs to.
+    const render = (place: string, block: string, withCaret = false) => {
+      const id = withCaret ? `\0${block}` : block
+      let element = cache.get(id)
+      if (element === undefined) {
+        element = renderBlock(block, {
+          components: renderComponents,
+          footnotes,
+          decorate: (tree) => {
+            if (fade)
+              nextFading.set(
+                place,
+                onScreen?.has(block)
+                  ? shown(tree)
+                  : fadeIn(tree, fading.get(place)),
+              )
+            if (withCaret && shape) placeCaret(tree, shape)
+          },
+        })
+      } else {
+        const state = fading.get(place)
+        if (state) nextFading.set(place, state)
+      }
+      next.set(id, element)
       return element
     }
     // Footnote contents share the cache, so an unchanged definition renders
     // to the very same element and the store sees no change.
     const result = {
-      blocks: blocks.map(render),
-      footnotes: {
-        settled: new Map(
-          Array.from(definitions.settled, ([id, content]) => [
-            id,
-            render(content),
-          ]),
-        ),
-        open: definitions.open,
-      } satisfies Footnotes<ReactNode>,
+      blocks: blocks.map((block, i) => render(`${i}`, block, i === caretAt)),
+      footnotes: new Map(
+        Array.from(definitions, ([footnote, content]) => [
+          footnote,
+          render(`fn-${footnote}`, content),
+        ]),
+      ),
     }
     cacheRef.current.map = next
+    cacheRef.current.fading = nextFading
     return result
-  }, [blocks, definitions, processor, renderComponents])
+  }, [blocks, definitions, renderComponents, footnotes, fade, shape, caretAt])
 
   const body = rendered.blocks.map((element, i) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional during streaming

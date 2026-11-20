@@ -1,158 +1,131 @@
+import { createHtmlSession } from '@pierre/words'
 import { describe, expect, it } from 'vitest'
-import { splitBlocks } from './blocks.js'
-import { createProcessor } from './processor.js'
+import {
+  holdPendingFootnote,
+  settleOpenFence,
+  splitDocument,
+  splitHtml,
+} from './blocks.js'
 
-const processor = createProcessor({})
-const split = (md: string, live = false) =>
-  splitBlocks(md, processor, { live }).blocks
+const words = (md: string, incomplete = false) =>
+  createHtmlSession().render(md, { incomplete, math: true }).html
 
-describe('splitBlocks', () => {
-  it('splits paragraphs into separate blocks', () => {
-    const blocks = split('Hello\n\nWorld')
-    const nonEmpty = blocks.filter((b) => b.trim().length > 0)
-    expect(nonEmpty.length).toBe(2)
+describe('splitHtml', () => {
+  it('splits a document into its top-level elements', () => {
+    expect(splitHtml(words('# A\n\nB\n\n---\n\n- c\n  - d'))).toEqual([
+      '<h1>A</h1>',
+      '<p>B</p>',
+      '<hr />',
+      '<ul>\n<li>c\n<ul>\n<li>d</li>\n</ul>\n</li>\n</ul>',
+    ])
   })
 
-  it('keeps code blocks as a single block', () => {
-    const md = '```js\nconst x = 1\nconst y = 2\n```'
-    const blocks = split(md)
-    expect(blocks.length).toBe(1)
-    expect(blocks[0]).toContain('const x = 1')
+  it('keeps void and self-closing elements inside their block', () => {
+    const md = '- [x] a  \n  b ![i](https://x.y/i.png)\n\nafter'
+    const blocks = splitHtml(words(md))
+    expect(blocks).toHaveLength(2)
+    expect(blocks[1]).toBe('<p>after</p>')
   })
 
-  it('splits HTML blocks at blank lines (standard CommonMark)', () => {
-    const md = '<div>\n\ninner content\n\n</div>'
-    const blocks = split(md)
-    // remark ends an HTML block at a blank line; the old marked-based splitter
-    // non-standardly merged this into one block. Standard behavior is to split.
-    expect(blocks.length).toBeGreaterThan(1)
-    expect(blocks.join('\n')).toContain('inner content')
+  it('reads tag-like text and attribute values as text', () => {
+    const md =
+      '[x](https://a.b/ "t<i>t>le/") `</p>` $a<b>c$\n\n```\n</pre>\n```'
+    const blocks = splitHtml(words(md))
+    expect(blocks).toHaveLength(2)
+    expect(blocks[1]).toMatch(/^<pre>.*<\/pre>$/s)
   })
 
-  it('keeps math blocks with an unclosed $$ as a single block', () => {
-    const md = '$$\nx = 1\n\ny = 2\n$$'
-    const blocks = split(md)
-    expect(blocks.length).toBe(1)
-  })
-
-  it('does not merge $$ inside code blocks', () => {
-    const md = '```\n$$\n```\n\nsome text'
-    const blocks = split(md)
-    expect(blocks.length).toBeGreaterThan(1)
-  })
-
-  it('returns a single block when footnotes are present', () => {
-    const md = 'Hello[^1]\n\n[^1]: footnote'
-    const blocks = split(md)
-    expect(blocks.length).toBe(1)
+  it('keeps an open code fence as one block', () => {
+    expect(splitHtml(words('intro\n\n```js\nlet a\n\nlet b', true))).toEqual([
+      '<p>intro</p>',
+      '<pre data-markdown-incomplete><code class="language-js">let a\n\nlet b\n</code></pre>',
+    ])
   })
 
   it('handles empty input', () => {
-    const blocks = split('')
-    expect(blocks.length).toBe(0)
-  })
-
-  it('heals the trailing block in streaming mode', () => {
-    const blocks = split('# Heading\n\nfirst para\n\n**bo', true)
-    expect(blocks[blocks.length - 1]).toContain('**bo**')
-  })
-
-  it('does not heal in non-streaming mode', () => {
-    const blocks = split('# Heading\n\nfirst para\n\n**bo')
-    expect(blocks[blocks.length - 1]).not.toContain('**bo**')
+    expect(splitHtml(words(''))).toEqual([])
   })
 })
 
-describe('splitBlocks with inline footnotes', () => {
-  const inline = createProcessor({ footnotes: 'inline' })
-  const split = (md: string, live = false) =>
-    splitBlocks(md, inline, { live, footnotes: 'inline' })
+describe('splitDocument', () => {
+  const md = 'A[^1] B[^note].\n\n[^1]: One.\n\n[^note]: Two *b*.\n\n    Para.'
 
-  it('keeps blocks split and lifts definitions out of the body', () => {
-    const { blocks, footnotes } = split(
-      'Alpha[^1].\n\nBeta[^b].\n\n[^1]: One.\n\n[^b]: Two.',
-    )
-    expect(blocks).toEqual(['Alpha[^1].', 'Beta[^b].'])
-    expect(footnotes.settled).toEqual(
+  it('keeps the footnote section as a block in section mode', () => {
+    const { blocks, footnotes } = splitDocument(words(md))
+    expect(blocks).toHaveLength(2)
+    expect(blocks[1]).toMatch(/^<section class="footnotes" data-footnotes>/)
+    expect(footnotes.size).toBe(0)
+  })
+
+  it('lifts each footnote out of the body in inline mode', () => {
+    const { blocks, footnotes } = splitDocument(words(md), 'inline')
+    expect(blocks).toHaveLength(1)
+    expect(footnotes).toEqual(
       new Map([
-        ['1', 'One.'],
-        ['b', 'Two.'],
+        ['1', '<p>One.</p>'],
+        ['2', '<p>Two <em>b</em>.</p>\n<p>Para.</p>'],
       ]),
     )
-    expect(footnotes.open).toBeUndefined()
   })
 
-  it('keys definitions by identifier', () => {
-    const { footnotes } = split('A[^Note].\n\n[^Note]: Def.')
-    expect([...footnotes.settled.keys()]).toEqual(['note'])
-  })
-
-  it('keeps the trailing definition open while live', () => {
-    const { footnotes } = split('A[^1][^2].\n\n[^1]: One.\n\n[^2]: Tw', true)
-    expect(footnotes.settled).toEqual(new Map([['1', 'One.']]))
-    expect(footnotes.open).toBe('2')
-  })
-
-  it('settles a definition once body content follows it', () => {
-    const { blocks, footnotes } = split('[^1]: One.\n\nMore body', true)
-    expect(footnotes.settled.get('1')).toBe('One.')
-    expect(blocks).toEqual(['More body'])
-  })
-
-  it('settles every definition once the stream ends', () => {
-    const { footnotes } = split('A[^1].\n\n[^1]: One.')
-    expect(footnotes.settled.get('1')).toBe('One.')
-    expect(footnotes.open).toBeUndefined()
-  })
-
-  it('keeps the first of duplicate definitions', () => {
-    const { footnotes } = split('[^1]: First.\n\n[^1]: Second.', true)
-    expect(footnotes.settled.get('1')).toBe('First.')
-    expect(footnotes.open).toBeUndefined()
-  })
-
-  it('strips the continuation indent from multi-block definitions', () => {
-    const { footnotes } = split(
-      '[^1]: First para.\n\n    Second para.\n\n    - item\n      cont\n\nAfter',
+  it('drops every backref, including those of repeated references', () => {
+    const { footnotes } = splitDocument(
+      words('A[^1] B[^1]\n\n[^1]: One.'),
+      'inline',
     )
-    expect(footnotes.settled.get('1')).toBe(
-      'First para.\n\nSecond para.\n\n- item\n  cont',
-    )
+    expect(footnotes.get('1')).toBe('<p>One.</p>')
   })
 
-  it('reads a definition that starts on the next line', () => {
-    const { footnotes } = split('[^1]:\n    Next line.')
-    expect(footnotes.settled.get('1')).toBe('Next line.')
+  it('leaves out a definition with no content yet', () => {
+    const { footnotes } = splitDocument(words('A[^1]\n\n[^1]:', true), 'inline')
+    expect(footnotes.size).toBe(0)
   })
+})
 
-  it('reads an empty definition as empty content', () => {
-    expect(split('[^1]:').footnotes.settled.get('1')).toBe('')
-  })
-
-  it('does not heal a complete body block followed by a definition', () => {
-    const { blocks } = split('Literal ** stars.\n\n[^1]: Op', true)
-    expect(blocks).toEqual(['Literal ** stars.'])
-  })
-
+describe('holdPendingFootnote', () => {
   it.each(['[', '[^', '[^2', '[^2]'])(
-    'holds back the opening of a definition (%s) while live',
+    'holds back the opening of a definition (%s)',
     (opening) => {
-      const { blocks } = split(`A[^1].\n\n[^1]: One.\n\n${opening}`, true)
-      expect(blocks).toEqual(['A[^1].'])
+      expect(holdPendingFootnote(`A[^1].\n\n[^1]: One.\n\n${opening}`)).toBe(
+        'A[^1].\n\n[^1]: One.\n\n',
+      )
     },
   )
 
-  it('holds back an unclosed reference instead of healing it into a link', () => {
-    const { blocks } = split('Claim[^1', true)
-    expect(blocks).toEqual(['Claim'])
+  it('holds back an unclosed reference', () => {
+    expect(holdPendingFootnote('Claim[^1')).toBe('Claim')
   })
 
-  it('leaves an unclosed reference inside code alone', () => {
-    const { blocks } = split('```\n/[^a-z', true)
-    expect(blocks[0]).toContain('/[^a-z')
+  it('leaves complete references and other brackets alone', () => {
+    for (const md of ['Claim[^1]', 'A [link', 'a[b', 'x [^1]: y'])
+      expect(holdPendingFootnote(md)).toBe(md)
+  })
+})
+
+describe('settleOpenFence', () => {
+  const settle = (md: string, live: boolean) =>
+    settleOpenFence(words(md, live), md, live)
+
+  it('drops the LF Words adds to a line still being written', () => {
+    expect(settle('```js\nlet a\nlet', true)).toBe(
+      '<pre data-markdown-incomplete><code class="language-js">let a\nlet</code></pre>\n',
+    )
   })
 
-  it('renders a pending opening once the stream ends', () => {
-    expect(split('Body\n\n[^2]').blocks).toEqual(['Body', '[^2]'])
+  it('keeps the LF of a complete line', () => {
+    expect(settle('```js\nlet a\n', true)).toBe(
+      '<pre data-markdown-incomplete><code class="language-js">let a\n</code></pre>\n',
+    )
+  })
+
+  it('unmarks the fence once nothing more is coming', () => {
+    expect(settle('```js\nlet', false)).toBe(
+      '<pre><code class="language-js">let\n</code></pre>\n',
+    )
+  })
+
+  it('leaves closed fences alone', () => {
+    const md = 'a\n\n```js\nlet\n```\n\nb'
+    expect(settle(md, true)).toBe(words(md, true))
   })
 })

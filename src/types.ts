@@ -1,23 +1,19 @@
 import type { Element } from 'hast'
 import type * as React from 'react'
 import type { ComponentType } from 'react'
-import type { PluggableList } from 'unified'
-import type { CodeBlockProps } from './code-block/types.js'
+import type { CodeBlockProps } from './code-block.js'
 import type { FootnoteMode, FootnoteRefProps } from './footnote/types.js'
+import type { CaretShape } from './parse/streaming.js'
 
-export interface StreamupPlugin {
-  remarkPlugins?: PluggableList
-  rehypePlugins?: PluggableList
-}
+export type { CaretShape }
 
 /**
- * Map hast tag names to React components, passed to `Streamup` as `components`.
+ * Map tag names to React components, passed to `Streamup` as `components`.
  *
- * Native HTML/SVG tag names get their usual JSX props plus an optional hast
- * `node` (because `passNode` is on). Custom element names — e.g. the
- * `'code-block'` produced by `rehypeCodeBlocks()` — are mapped here too, so a
- * fenced code block can render with a clean `{ language, code }` contract
- * instead of digging through the hast node.
+ * Native HTML/SVG tag names get their usual JSX props plus the hast `node`.
+ * Two more names stand for Streamup's own elements: `'code-block'`, which
+ * every fenced code block renders through (default `CodeBlock`), and
+ * `'footnote-ref'` in inline footnote mode.
  */
 // An open tagName→component map must accept components with arbitrary prop
 // shapes, so the index signature uses `any` while the named keys stay typed.
@@ -64,12 +60,24 @@ export interface StreamupProps {
    */
   pacing?: PacingConfig | boolean
   components?: StreamupComponents
-  plugins?: StreamupPlugin[]
-  singleDollarTextMath?: boolean
+  /** Render TeX between dollar signs, and `math` fences, as SVG. Default `true`. */
+  math?: boolean
   /**
    * `'section'` (default) renders GFM footnotes. `'inline'` renders each
    * reference through `components['footnote-ref']` with its footnote's
    * content, keeping the body's blocks independent of the footnote section.
    */
   footnotes?: FootnoteMode
+  /**
+   * Fade in new text while streaming, as Words does: each arrival is wrapped
+   * in `<span data-markdown="token">` until the stream ends. Code blocks do
+   * not fade. Needs `@opticlm/streamup/styles.css`. Default `false`.
+   */
+  animated?: boolean
+  /**
+   * Show a caret where text arrives while streaming: a zero-width
+   * `<span data-markdown="caret" data-shape>` whose glyph comes from
+   * `@opticlm/streamup/styles.css`. Off by default.
+   */
+  caret?: CaretShape
 }
