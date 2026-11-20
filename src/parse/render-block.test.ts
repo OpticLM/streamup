@@ -1,7 +1,5 @@
-import type { Root } from 'hast'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { visit } from 'unist-util-visit'
 import { describe, expect, it } from 'vitest'
 import { Streamup } from '../streamup.js'
 import type { StreamupProps } from '../types.js'
@@ -70,17 +68,6 @@ describe('rendering', () => {
     expect(render('```js\nlet', { streaming: true })).toContain(
       '<pre data-markdown-incomplete="">',
     )
-  })
-
-  it('runs rehype plugins on every block', () => {
-    const tags: string[] = []
-    const probe = () => (tree: Root) => {
-      visit(tree, 'element', (node) => {
-        tags.push(node.tagName)
-      })
-    }
-    render('# A\n\nB', { plugins: [{ rehypePlugins: [probe] }] })
-    expect(tags).toEqual(['h1', 'p'])
   })
 })
 

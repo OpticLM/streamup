@@ -1,5 +1,4 @@
 import type { Root } from 'hast'
-import type { Plugin } from 'unified'
 import { visit } from 'unist-util-visit'
 
 /** CJK punctuation that ends a literal autolink: `。`, `，`, `（`, `」`, … */
@@ -8,11 +7,11 @@ const BOUNDARY = /[、。〈-】！（），．：；？]/
 const AUTOLINK = /^(?:https?:\/\/|mailto:|www\.)/i
 
 /**
- * Rehype plugin that ends a literal autolink at CJK punctuation, so
+ * End a literal autolink at CJK punctuation, so
  * `https://example.com。下一句` links only `https://example.com`. GFM stops an
  * autolink at whitespace only, and CJK text has none between sentences.
  */
-export const rehypeCjkAutolinkBoundary: Plugin<[], Root> = () => (tree) => {
+export function cjkAutolinkBoundary(tree: Root): void {
   visit(tree, 'element', (node, index, parent) => {
     if (node.tagName !== 'a' || !parent || index === undefined) return
     const [text] = node.children

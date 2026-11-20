@@ -1,5 +1,4 @@
 import type { Element, ElementContent, Root } from 'hast'
-import type { Plugin } from 'unified'
 import { SKIP, visit } from 'unist-util-visit'
 
 export const FOOTNOTE_REF_TAG = 'footnote-ref'
@@ -43,7 +42,7 @@ function splitReferences(value: string): ElementContent[] | undefined {
 }
 
 /**
- * Rehype plugin for inline footnote mode. Every reference becomes a
+ * For inline footnote mode: every reference becomes a
  * `<footnote-ref label="…">` element:
  *
  * - one Words has linked to its footnote (`<sup><a data-footnote-ref>`) also
@@ -51,7 +50,7 @@ function splitReferences(value: string): ElementContent[] | undefined {
  * - `[^label]` that Words left as text, because no definition has arrived
  *   (yet), carries only its label.
  */
-export const rehypeInlineFootnotes: Plugin<[], Root> = () => (tree) => {
+export function inlineFootnotes(tree: Root): void {
   visit(tree, (node, index, parent) => {
     if (!parent || index === undefined) return
     const siblings = parent.children as ElementContent[]

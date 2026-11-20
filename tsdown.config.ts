@@ -1,12 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: [
-    'src/index.ts',
-    'src/mermaid/index.tsx',
-    'src/pele/index.tsx',
-    'src/code-block/index.tsx',
-  ],
+  entry: ['src/index.ts', 'src/mermaid/index.tsx', 'src/pele/index.tsx'],
   format: ['esm'],
   minify: true,
   dts: true,
@@ -17,13 +12,6 @@ export default defineConfig({
   sourcemap: false,
   deps: {
     onlyBundle: false,
-    neverBundle: [
-      'react',
-      'react-dom',
-      'react/jsx-runtime',
-      'mermaid',
-      'pele',
-      'pele/lazy',
-    ],
+    neverBundle: ['react', 'react-dom', 'react/jsx-runtime', 'mermaid', 'pele'],
   },
 })

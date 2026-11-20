@@ -1,19 +1,20 @@
 import type { MermaidConfig } from 'mermaid'
 import { useEffect, useId, useState } from 'react'
+import { CodeBlock } from '../code-block.js'
 
 export type { MermaidConfig } from 'mermaid'
 
 export interface MermaidRendererProps {
   code: string
   config?: MermaidConfig
-  /** Whether the source Markdown fence has been closed. Defaults to `true`. */
-  isClosed?: boolean
+  /** The fence is still streaming: show the source until it closes. Defaults to `false`. */
+  isIncomplete?: boolean
 }
 
 export function MermaidRenderer({
   code,
   config,
-  isClosed = true,
+  isIncomplete = false,
 }: MermaidRendererProps) {
   const id = useId().replace(/:/g, '_')
   const [svg, setSvg] = useState<string | null>(null)
@@ -23,7 +24,7 @@ export function MermaidRenderer({
     let cancelled = false
     setSvg(null)
     setFailed(false)
-    if (!isClosed) return
+    if (isIncomplete) return
     import('mermaid')
       .then((mod) => {
         if (cancelled) return
@@ -44,15 +45,12 @@ export function MermaidRenderer({
     return () => {
       cancelled = true
     }
-  }, [code, id, config, isClosed])
+  }, [code, id, config, isIncomplete])
 
-  if (!isClosed || failed || svg === null) {
+  if (isIncomplete || failed || svg === null)
     return (
-      <pre>
-        <code>{code}</code>
-      </pre>
+      <CodeBlock code={code} language="mermaid" isIncomplete={isIncomplete} />
     )
-  }
 
   return (
     <div

@@ -1,5 +1,4 @@
 import type { Root } from 'hast'
-import type { Plugin } from 'unified'
 import { visit } from 'unist-util-visit'
 
 /** URL schemes allowed per attribute, as in rehype-sanitize's default schema plus `tel`. */
@@ -16,11 +15,11 @@ function isSafe(url: string, protocols: readonly string[]): boolean {
 }
 
 /**
- * Rehype plugin that drops `href` and `src` values with any other scheme,
- * such as `javascript:` or `data:`. Words omits raw HTML, but keeps link and
- * image destinations as written.
+ * Drop `href` and `src` values with any other scheme, such as `javascript:`
+ * or `data:`. Words omits raw HTML, but keeps link and image destinations as
+ * written.
  */
-export const rehypeSafeUrls: Plugin<[], Root> = () => (tree) => {
+export function safeUrls(tree: Root): void {
   visit(tree, 'element', (node) => {
     for (const key of ['href', 'src'] as const) {
       const url = node.properties[key]

@@ -76,6 +76,31 @@ export function splitDocument(
   return { blocks, footnotes: contents }
 }
 
+const OPEN_FENCE = '<pre data-markdown-incomplete>'
+
+/**
+ * Words marks an open fence whether or not more text is coming, and ends its
+ * last line with LF even while the line is half written. Make the HTML say
+ * what is true: an open fence is incomplete only while `live`, and then its
+ * last line has no LF until `markdown` ends with one. There is at most one
+ * open fence: the one the document ends in.
+ */
+export function settleOpenFence(
+  html: string,
+  markdown: string,
+  live: boolean,
+): string {
+  const at = html.indexOf(OPEN_FENCE)
+  if (at === -1) return html
+  if (!live)
+    return `${html.slice(0, at)}<pre>${html.slice(at + OPEN_FENCE.length)}`
+  if (/[\n\r]$/.test(markdown)) return html
+  const end = html.indexOf('</code></pre>', at)
+  return html[end - 1] === '\n'
+    ? html.slice(0, end - 1) + html.slice(end)
+    : html
+}
+
 /**
  * Hold back pending footnote syntax at the end of a stream. A definition's
  * opening would flash as a paragraph, and an unclosed `[^label` as text.

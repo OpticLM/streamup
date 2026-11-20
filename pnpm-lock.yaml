@@ -9,16 +9,13 @@ importers:
     dependencies:
       "@pierre/words":
         specifier: ^0.2.2
-        version: 0.2.2(react@19.3.1)
+        version: 0.2.2(@pierre/highlights@0.5.2)(react@19.3.1)
       hast-util-from-html-isomorphic:
         specifier: ^2.0.0
         version: 2.0.0
       hast-util-to-jsx-runtime:
         specifier: ^2.3.6
         version: 2.3.6
-      unified:
-        specifier: ^11.0.5
-        version: 11.0.5
       unist-util-visit:
         specifier: ^5.0.0
         version: 5.1.0
@@ -26,6 +23,9 @@ importers:
       "@biomejs/biome":
         specifier: 2.6.2
         version: 2.6.2
+      "@pierre/highlights":
+        specifier: ^0.5.2
+        version: 0.5.2
       "@testing-library/react":
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -606,6 +606,12 @@ packages:
     resolution:
       {
         integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==,
+      }
+
+  "@pierre/highlights@0.5.2":
+    resolution:
+      {
+        integrity: sha512-CV+yFa8dodaU3w7U42FR+AfoavrsfcH0/n3rckDu1A/UXan1Dzo6OdM/MPOAAsGM/EbKhDxD6k+qMcNUtnLfsg==,
       }
 
   "@pierre/words@0.2.2":
@@ -1619,12 +1625,6 @@ packages:
       }
     engines: { node: ">=12" }
 
-  bail@2.0.2:
-    resolution:
-      {
-        integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==,
-      }
-
   bidi-js@1.1.0:
     resolution:
       {
@@ -2152,12 +2152,6 @@ packages:
       }
     engines: { node: ">=12.0.0" }
 
-  extend@3.0.2:
-    resolution:
-      {
-        integrity: sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==,
-      }
-
   fdir@6.5.0:
     resolution:
       {
@@ -2314,13 +2308,6 @@ packages:
       {
         integrity: sha512-DgZQp241c8oO6cA1SbTEWiXeoxV42vlcJxgH+B3hi1AiqqKruZR3ZGF8In3fj4+/y/7rHvlOZLZtgJ/4ttYGZg==,
       }
-
-  is-plain-obj@4.1.0:
-    resolution:
-      {
-        integrity: sha512-+Pgi+vMuUNkJyExiMBt5IlFoMyKnr5zhJ4Uspz58WOhBF5QoIZkFyNHIbBAtHwzVAgk5RtndVNsDRN61/mmDqg==,
-      }
-    engines: { node: ">=12" }
 
   is-potential-custom-element-name@1.0.1:
     resolution:
@@ -2925,12 +2912,6 @@ packages:
       }
     hasBin: true
 
-  trough@2.2.0:
-    resolution:
-      {
-        integrity: sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==,
-      }
-
   ts-dedent@2.3.0:
     resolution:
       {
@@ -3001,12 +2982,6 @@ packages:
         integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==,
       }
     engines: { node: ">=22.19.0" }
-
-  unified@11.0.5:
-    resolution:
-      {
-        integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==,
-      }
 
   unist-util-is@6.0.1:
     resolution:
@@ -3476,8 +3451,11 @@ snapshots:
 
   "@oxc-project/types@0.155.0": {}
 
-  "@pierre/words@0.2.2(react@19.3.1)":
+  "@pierre/highlights@0.5.2": {}
+
+  "@pierre/words@0.2.2(@pierre/highlights@0.5.2)(react@19.3.1)":
     optionalDependencies:
+      "@pierre/highlights": 0.5.2
       react: 19.3.1
 
   "@quansync/fs@1.0.0":
@@ -3920,8 +3898,6 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  bail@2.0.2: {}
-
   bidi-js@1.1.0:
     dependencies:
       require-from-string: 2.0.2
@@ -4241,8 +4217,6 @@ snapshots:
 
   expect-type@1.4.0: {}
 
-  extend@3.0.2: {}
-
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
@@ -4357,8 +4331,6 @@ snapshots:
   is-decimal@2.0.1: {}
 
   is-hexadecimal@2.0.1: {}
-
-  is-plain-obj@4.1.0: {}
 
   is-potential-custom-element-name@1.0.1: {}
 
@@ -4856,8 +4828,6 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  trough@2.2.0: {}
-
   ts-dedent@2.3.0: {}
 
   tsdown@0.23.1(typescript@7.0.2):
@@ -4916,16 +4886,6 @@ snapshots:
   undici-types@8.9.0: {}
 
   undici@8.12.3: {}
-
-  unified@11.0.5:
-    dependencies:
-      "@types/unist": 3.0.3
-      bail: 2.0.2
-      devlop: 1.1.0
-      extend: 3.0.2
-      is-plain-obj: 4.1.0
-      trough: 2.2.0
-      vfile: 6.0.3
 
   unist-util-is@6.0.1:
     dependencies:

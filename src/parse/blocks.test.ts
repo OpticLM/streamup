@@ -1,6 +1,11 @@
 import { createHtmlSession } from '@pierre/words'
 import { describe, expect, it } from 'vitest'
-import { holdPendingFootnote, splitDocument, splitHtml } from './blocks.js'
+import {
+  holdPendingFootnote,
+  settleOpenFence,
+  splitDocument,
+  splitHtml,
+} from './blocks.js'
 
 const words = (md: string, incomplete = false) =>
   createHtmlSession().render(md, { incomplete, math: true }).html
@@ -94,5 +99,33 @@ describe('holdPendingFootnote', () => {
   it('leaves complete references and other brackets alone', () => {
     for (const md of ['Claim[^1]', 'A [link', 'a[b', 'x [^1]: y'])
       expect(holdPendingFootnote(md)).toBe(md)
+  })
+})
+
+describe('settleOpenFence', () => {
+  const settle = (md: string, live: boolean) =>
+    settleOpenFence(words(md, live), md, live)
+
+  it('drops the LF Words adds to a line still being written', () => {
+    expect(settle('```js\nlet a\nlet', true)).toBe(
+      '<pre data-markdown-incomplete><code class="language-js">let a\nlet</code></pre>\n',
+    )
+  })
+
+  it('keeps the LF of a complete line', () => {
+    expect(settle('```js\nlet a\n', true)).toBe(
+      '<pre data-markdown-incomplete><code class="language-js">let a\n</code></pre>\n',
+    )
+  })
+
+  it('unmarks the fence once nothing more is coming', () => {
+    expect(settle('```js\nlet', false)).toBe(
+      '<pre><code class="language-js">let\n</code></pre>\n',
+    )
+  })
+
+  it('leaves closed fences alone', () => {
+    const md = 'a\n\n```js\nlet\n```\n\nb'
+    expect(settle(md, true)).toBe(words(md, true))
   })
 })

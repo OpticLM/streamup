@@ -71,7 +71,7 @@ describe('MermaidRenderer (client effect)', () => {
   it('does not attempt to render an unclosed mermaid block', async () => {
     const code = 'flowchart TD\n  A --> B'
     const { container } = render(
-      createElement(MermaidRenderer, { code, isClosed: false }),
+      createElement(MermaidRenderer, { code, isIncomplete: true }),
     )
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0))

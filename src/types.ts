@@ -1,23 +1,16 @@
 import type { Element } from 'hast'
 import type * as React from 'react'
 import type { ComponentType } from 'react'
-import type { PluggableList } from 'unified'
-import type { CodeBlockProps } from './code-block/types.js'
+import type { CodeBlockProps } from './code-block.js'
 import type { FootnoteMode, FootnoteRefProps } from './footnote/types.js'
 
-/** Rehype plugins, run on each block of the HTML Words renders. */
-export interface StreamupPlugin {
-  rehypePlugins?: PluggableList
-}
-
 /**
- * Map hast tag names to React components, passed to `Streamup` as `components`.
+ * Map tag names to React components, passed to `Streamup` as `components`.
  *
- * Native HTML/SVG tag names get their usual JSX props plus an optional hast
- * `node` (because `passNode` is on). Custom element names — e.g. the
- * `'code-block'` produced by `rehypeCodeBlocks()` — are mapped here too, so a
- * fenced code block can render with a clean `{ language, code }` contract
- * instead of digging through the hast node.
+ * Native HTML/SVG tag names get their usual JSX props plus the hast `node`.
+ * Two more names stand for Streamup's own elements: `'code-block'`, which
+ * every fenced code block renders through (default `CodeBlock`), and
+ * `'footnote-ref'` in inline footnote mode.
  */
 // An open tagName→component map must accept components with arbitrary prop
 // shapes, so the index signature uses `any` while the named keys stay typed.
@@ -64,7 +57,6 @@ export interface StreamupProps {
    */
   pacing?: PacingConfig | boolean
   components?: StreamupComponents
-  plugins?: StreamupPlugin[]
   /** Render TeX between dollar signs, and `math` fences, as SVG. Default `true`. */
   math?: boolean
   /**

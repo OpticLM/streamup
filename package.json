@@ -17,10 +17,6 @@
     "./pele": {
       "types": "./dist/pele/index.d.mts",
       "default": "./dist/pele/index.mjs"
-    },
-    "./code-block": {
-      "types": "./dist/code-block/index.d.mts",
-      "default": "./dist/code-block/index.mjs"
     }
   },
   "files": ["dist/**/*.mjs", "dist/**/*.d.mts", "LICENSE"],
@@ -58,11 +54,11 @@
     "@pierre/words": "^0.2.2",
     "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
-    "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
+    "@pierre/highlights": "^0.5.2",
     "@testing-library/react": "^16.3.3",
     "@types/hast": "^3.0.5",
     "@types/node": "^26.6.5",

@@ -1,13 +1,10 @@
 import { createHtmlSession } from '@pierre/words'
-import type { Element, Root } from 'hast'
+import type { Element } from 'hast'
 import { fromHtmlIsomorphic } from 'hast-util-from-html-isomorphic'
-import { unified } from 'unified'
 import { visit } from 'unist-util-visit'
 import { describe, expect, it } from 'vitest'
 import { splitDocument } from '../parse/blocks.js'
-import { rehypeInlineFootnotes } from './rehype-inline-footnotes.js'
-
-const processor = unified().use(rehypeInlineFootnotes)
+import { inlineFootnotes } from './inline-footnotes.js'
 
 /** The references in the body of `md`, which inline mode renders without its footnote section. */
 function refs(md: string) {
@@ -15,16 +12,17 @@ function refs(md: string) {
     createHtmlSession().render(md).html,
     'inline',
   ).blocks.join('')
-  const tree = processor.runSync(fromHtmlIsomorphic(html, { fragment: true }))
+  const tree = fromHtmlIsomorphic(html, { fragment: true })
+  inlineFootnotes(tree)
   const found: Element['properties'][] = []
-  visit(tree as Root, 'element', (node) => {
+  visit(tree, 'element', (node) => {
     if (node.tagName === 'sup') found.push({ sup: true })
     if (node.tagName === 'footnote-ref') found.push(node.properties)
   })
   return found
 }
 
-describe('rehypeInlineFootnotes', () => {
+describe('inlineFootnotes', () => {
   it('turns a linked reference into a footnote-ref with its number', () => {
     expect(refs('A[^note] and B[^note]\n\n[^note]: Def.')).toEqual([
       { label: '1', footnote: '1' },

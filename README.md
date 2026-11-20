@@ -58,69 +58,64 @@ While streaming, a code fence that hasn't closed yet renders as `<pre data-markd
 
 ## Code blocks
 
-Inline code is always native `<code>`. Fenced (non-inline) code blocks render as native `<pre><code class="language-…">` by default — that's what shadcn/typeset styles, so leave them alone unless you need something custom.
+Inline code is native `<code>`. Every fenced code block renders through `components['code-block']`, which receives the block in the shape Words hands its own code plugins (`CodeOptions`):
 
-To take over fenced code blocks, add the `codeBlocks` plugin and map the `code-block` element it produces to a component. Your component receives a clean `{ language, code }` contract — no digging through the hast node:
+| Prop           | Type      | Description                                                                                                   |
+| -------------- | --------- | ------------------------------------------------------------------------------------------------------------- |
+| `code`         | `string`  | The block's lines, each ending with LF. While the fence streams, its last line has no LF until it is complete |
+| `language`     | `string`  | The first word of the info string, or `''`                                                                    |
+| `isIncomplete` | `boolean` | The fence is still open and more text is coming                                                               |
+
+The default is `CodeBlock`: native `<pre><code class="language-…">`, which is what shadcn/typeset styles, marked `<pre data-markdown-incomplete>` while the fence streams.
+
+### Syntax highlighting
+
+`CodeBlock` takes a Words code highlighter. To highlight with [`@pierre/highlights`](https://www.npmjs.com/package/@pierre/highlights), install it and use Words' `createHighlightsPlugin`:
+
+```sh
+pnpm add @pierre/highlights
+```
 
 ```tsx
-import { Streamup } from '@opticlm/streamup'
-import { codeBlocks } from '@opticlm/streamup/code-block'
+import { CodeBlock, type CodeBlockProps, Streamup } from '@opticlm/streamup'
+import pierreLight from '@pierre/highlights/themes/pierre-light'
+import { createHighlightsPlugin } from '@pierre/words/highlights'
 
-const plugins = useMemo(() => [codeBlocks()], [])
-const components = useMemo(
-  () => ({ 'code-block': ({ language, code }) => <MyCodeBlock language={language} code={code} /> }),
-  [],
-)
+// Create both once, outside the render.
+const highlighter = createHighlightsPlugin({ theme: pierreLight })
+const components = {
+  'code-block': (props: CodeBlockProps) => (
+    <CodeBlock {...props} highlighter={highlighter} />
+  ),
+}
 
-<Streamup streaming plugins={plugins} components={components}>
+<Streamup streaming components={components}>
   {markdown}
 </Streamup>
 ```
 
-`codeBlocks` turns every fenced `<pre><code class="language-x">` into a `<code-block language="x" code="…">` element; `components['code-block']` renders it. If you use `codeBlocks` you **must** map `code-block`. The exported `DefaultCodeBlock` renders native `<pre><code>`, so a custom component can delegate the blocks it doesn't care about:
+Each token becomes a `<span>` colored by the theme, and a language the highlighter does not know stays plain text. The theme's background is not applied, so pick a theme that suits your code background.
+
+### Your own component
+
+Map `code-block` to any component, and delegate to `CodeBlock` for the parts you don't change:
 
 ```tsx
-import { Streamup } from '@opticlm/streamup'
-import { DefaultCodeBlock } from '@opticlm/streamup/code-block'
-
-// Highlight only `ts`; leave every other block as native <pre><code>.
-const components = useMemo(
-  () => ({
-    'code-block': ({ language, code }) =>
-      language === 'ts' ? (
-        <Highlighter code={code} />
-      ) : (
-        <DefaultCodeBlock language={language} code={code} />
-      ),
-  }),
-  [],
-)
+const components = {
+  'code-block': (props: CodeBlockProps) => (
+    <figure>
+      <figcaption>
+        {props.language} <CopyButton text={props.code} />
+      </figcaption>
+      <CodeBlock {...props} highlighter={highlighter} />
+    </figure>
+  ),
+}
 ```
 
-You can also override any native element directly through `components` to pair with your own rehype plugins. Override `pre` and use the exported `findCode` / `extractLanguage` / `textOf` helpers to read the block:
+Keep `components` stable — define it outside the component, or memoize it — since the streaming block cache keys on it.
 
-```tsx
-import { Streamup, findCode, extractLanguage, textOf } from '@opticlm/streamup'
-
-const components = useMemo(
-  () => ({
-    pre: ({ node, children }) => {
-      const code = node ? findCode(node) : undefined
-      return code ? (
-        <MyCodeBlock
-          language={extractLanguage(code.properties?.className)}
-          code={textOf(code)}
-        />
-      ) : (
-        <pre>{children}</pre>
-      )
-    },
-  }),
-  [],
-)
-```
-
-Memoize `components` so its identity stays stable — the streaming block cache keys on it.
+These props are Words' `CodeOptions`, so a renderer written for Words' `plugins.renderers` takes them as they are: call its `render(props)` from your component and set the HTML it returns.
 
 ## Math
 
@@ -151,77 +146,48 @@ Pass `math={false}` to leave dollar signs as text.
 
 ## Mermaid
 
-The `mermaid()` plugin turns ` ```mermaid ` fenced blocks into a `<mermaid-block code="…" isClosed={…}>` element and leaves every other fenced language as native `<pre><code>` for typeset. It only finds the diagram; whatever you map to `components['mermaid-block']` draws it. Streamup ships two renderers, [Mermaid.js](#mermaidjs) and [Pele](#pele). `isClosed` is false until the closing fence has arrived.
-
-### Mermaid.js
-
-```sh
-pnpm add mermaid
-```
-
-````tsx
-import { Streamup, mermaid } from '@opticlm/streamup'
-import { MermaidRenderer } from '@opticlm/streamup/mermaid'
-
-const config = { theme: 'dark' }
-const plugins = useMemo(() => [mermaid()], [])
-const components = useMemo(
-  () => ({
-    'mermaid-block': ({ code, isClosed }) => (
-      <MermaidRenderer code={code} config={config} isClosed={isClosed} />
-    ),
-  }),
-  [],
-)
-
-<Streamup streaming plugins={plugins} components={components}>
-  {'```mermaid\nflowchart TD\n  A --> B\n```'}
-</Streamup>
-````
-
-`MermaidRenderer` waits for the closing fence before rendering, and on a Mermaid syntax error it falls back to the raw source. Or render directly:
-
-```tsx
-import { MermaidRenderer } from '@opticlm/streamup/mermaid'
-;<MermaidRenderer code="flowchart TD; A-->B" config={{ theme: 'dark' }} />
-```
+A ` ```mermaid ` fence is a code block like any other, with `language` `'mermaid'`. Streamup ships two components to draw it, [Pele](#pele), which Words itself uses, and [Mermaid.js](#mermaidjs): map `code-block` to one of them for `mermaid`, and to `CodeBlock` for the rest.
 
 ### Pele
 
-[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. It reads the same fences, so the plugin stays `mermaid()` and only the renderer you map changes:
+[Pele](https://pele.run) is a dependency-free renderer for Mermaid syntax that draws plain SVG. `PeleRenderer` draws through Words' own Mermaid plugin, `@pierre/words/mermaid`.
 
 ```sh
 pnpm add pele
 ```
 
 ````tsx
-import { Streamup, mermaid } from '@opticlm/streamup'
+import { CodeBlock, type CodeBlockProps, Streamup } from '@opticlm/streamup'
 import { PeleRenderer } from '@opticlm/streamup/pele'
 
-const plugins = useMemo(() => [mermaid()], [])
-const components = useMemo(() => ({ 'mermaid-block': PeleRenderer }), [])
+const components = {
+  'code-block': (props: CodeBlockProps) =>
+    props.language === 'mermaid' ? (
+      <PeleRenderer {...props} />
+    ) : (
+      <CodeBlock {...props} />
+    ),
+}
 
-<Streamup streaming plugins={plugins} components={components}>
+<Streamup streaming components={components}>
   {'```mermaid\nflowchart TD\n  A --> B\n```'}
 </Streamup>
 ````
 
-Diagrams are drawn _while they stream_. Until the closing fence arrives, source that does not parse yet keeps the previous drawing on screen (or the source itself, if nothing has been drawn). Once the fence closes, source Pele still cannot render (a syntax error, an unsupported diagram type, a size limit) is shown as code. Rendering is client-side: server-rendered HTML contains the source, and `pele/lazy` is only downloaded once a diagram appears, one diagram type at a time. Or render directly:
+Pele renders synchronously, so a diagram is there in the first render, in server-rendered HTML too, and its source never flashes. While the fence streams, the diagram grows with each complete line, and a line that does not parse keeps the last diagram; an open fence with no diagram yet shows nothing. Once the fence closes, source Pele cannot render (a syntax error, an unsupported diagram type, a size limit) shows as code. `@opticlm/streamup/pele` imports all of Pele, so load the component lazily if your bundle size matters. Or render directly:
 
 ```tsx
 import { PeleRenderer } from '@opticlm/streamup/pele'
 ;<PeleRenderer code="flowchart TD; A-->B" options={{ fontSize: 14 }} />
 ```
 
-`options` takes any of [Pele's render options](https://pele.run/api). To pass it while mapping, wrap the renderer:
+`options` takes any of [Pele's render options](https://pele.run/api):
 
 ```tsx
-'mermaid-block': ({ code, isClosed }) => (
-  <PeleRenderer code={code} isClosed={isClosed} options={options} />
-)
+;<PeleRenderer {...props} options={options} />
 ```
 
-Memoize `options` if you can, since a new object re-renders the diagram. Each diagram gets its own `idPrefix` so several can share a page without clashing SVG ids; set `idPrefix` in `options` to choose your own.
+Memoize `options`, since a new object redraws the diagram and forgets the last one of an open fence. Each diagram gets its own `idPrefix` so several can share a page without clashing SVG ids; set `idPrefix` in `options` to choose your own.
 
 Pele draws with CSS variables instead of a `theme` option. Set them on `.pele` or any ancestor, and they apply without re-rendering ([all variables](https://pele.run/theming)):
 
@@ -244,12 +210,31 @@ Pele draws with CSS variables instead of a `theme` option. Set them on `.pele` o
 
 Pele's `package.json` declares `engines.node >= 20`.
 
-### With code blocks
+### Mermaid.js
 
-To draw diagrams _and_ customize other languages, list both plugins — `mermaid` first, then `codeBlocks` — and map both `mermaid-block` and `code-block`:
+```sh
+pnpm add mermaid
+```
 
 ```tsx
-const plugins = useMemo(() => [mermaid(), codeBlocks()], [])
+import { MermaidRenderer } from '@opticlm/streamup/mermaid'
+
+const config = { theme: 'dark' }
+const components = {
+  'code-block': (props: CodeBlockProps) =>
+    props.language === 'mermaid' ? (
+      <MermaidRenderer {...props} config={config} />
+    ) : (
+      <CodeBlock {...props} />
+    ),
+}
+```
+
+`MermaidRenderer` shows the source until the fence closes, then draws on the client; on a Mermaid syntax error it keeps showing the source. Or render directly:
+
+```tsx
+import { MermaidRenderer } from '@opticlm/streamup/mermaid'
+;<MermaidRenderer code="flowchart TD; A-->B" config={{ theme: 'dark' }} />
 ```
 
 ## Footnotes
@@ -288,24 +273,13 @@ Every `[^label]` renders as a reference from the start, so no footnote syntax fl
 | `children`   | `string`                  | `''`        | Markdown content                                                                                                                                                                                              |
 | `streaming`  | `boolean`                 | `false`     | Heal incomplete markdown and enable adaptive typewriter pacing (unless `pacing={false}`)                                                                                                                      |
 | `pacing`     | `PacingConfig \| boolean` | `undefined` | Adaptive typewriter pacing. `false` (or `tickMs <= 0`) disables it; `undefined` follows `streaming`; an object tunes the leaky bucket (`tickMs`, `low`, `high`, `slowCps`, `normCps`, `fastCps`, `scaleFast`) |
-| `components` | `StreamupComponents`      | —           | Map hast tag names (and custom elements like `code-block`) to React components                                                                                                                                |
-| `plugins`    | `StreamupPlugin[]`        | `[]`        | Add rehype plugins (e.g. `mermaid()`)                                                                                                                                                                         |
+| `components` | `StreamupComponents`      | —           | Map tag names to React components, including Streamup's own [`code-block`](#code-blocks) and [`footnote-ref`](#footnotes)                                                                                     |
 | `math`       | `boolean`                 | `true`      | Render [math](#math) as SVG                                                                                                                                                                                   |
 | `footnotes`  | `'section' \| 'inline'`   | `'section'` | Render footnotes as a trailing GFM section, or [inline](#footnotes) through `components['footnote-ref']`                                                                                                      |
 
-## Plugins
+## Customizing the output
 
-Add any rehype plugin via `plugins`. It runs on the HAST of each block Words renders. There is no Markdown syntax tree, so remark plugins don't apply.
-
-```tsx
-import type { StreamupPlugin } from '@opticlm/streamup'
-import myRehypePlugin from 'rehype-my-plugin'
-
-const myPlugin: StreamupPlugin = useMemo(() => ({ rehypePlugins: [[myRehypePlugin, { option: true }]] }), [])
-<Streamup streaming plugins={[myPlugin]}>{markdown}</Streamup>
-```
-
-When combining `mermaid()` and `codeBlocks()`, list them in that order: `mermaid` transforms only mermaid fences and leaves the rest, while `codeBlocks` consumes _every_ remaining fenced block, so it must come last.
+`components` is the one way to change what Streamup renders. Map any tag Words emits to a React component, or one of Streamup's own elements: `code-block` for [fenced code](#code-blocks) and `footnote-ref` for [inline footnotes](#footnotes). Native tags also receive the element's hast `node`. As in Words' own React component, Markdown goes straight to HTML, so there are no remark or rehype plugins.
 
 ## What's parsed by default
 
@@ -315,70 +289,19 @@ Raw HTML is not rendered: its tags are dropped and their text stays, so `H<sub>2
 
 ## Responsive tables
 
-Streamup emits plain `<table>`, which [shadcn/typeset](https://ui.shadcn.com/docs/typeset) styles as a real table that wraps to fit. To scroll a wide table horizontally instead, typeset wants it wrapped in a `typeset-scroll` container:
+Streamup emits plain `<table>`, which [shadcn/typeset](https://ui.shadcn.com/docs/typeset) styles as a real table that wraps to fit. To scroll a wide table horizontally instead, typeset wants it wrapped in a `typeset-scroll` container. Override `table` to add it:
 
-```html
-<div class="typeset-scroll">
-  <table>...</table>
-</div>
-```
-
-A small rehype plugin does that for every table. Add `unist-util-visit` (`pnpm add unist-util-visit`) and write:
-
-```ts
-// rehype-scroll-tables.ts
-import type { Root } from 'hast'
-import type { Plugin } from 'unified'
-import { SKIP, visit } from 'unist-util-visit'
-
-export const rehypeScrollTables: Plugin<[], Root> = () => (tree) => {
-  visit(tree, 'element', (node, index, parent) => {
-    if (node.tagName !== 'table' || !parent || index === undefined) return
-    parent.children[index] = {
-      type: 'element',
-      tagName: 'div',
-      properties: { className: ['typeset-scroll'] },
-      children: [node],
-    }
-    // Continue at the next sibling — don't descend into the wrapper we just made.
-    return SKIP
-  })
+```tsx
+const components = {
+  table: ({ node, ...props }) => (
+    <div className="typeset-scroll">
+      <table {...props} />
+    </div>
+  ),
 }
 ```
 
-Returning `SKIP` is what keeps this from looping forever: without it `visit` would walk into the new `<div>`, find the same `<table>`, and wrap it again.
-
-Then pass it through `plugins`:
-
-```tsx
-import { Streamup } from '@opticlm/streamup'
-import { rehypeScrollTables } from './rehype-scroll-tables'
-
-const plugins = useMemo(() => [{ rehypePlugins: [rehypeScrollTables] }], [])
-
-<Streamup streaming plugins={plugins}>{markdown}</Streamup>
-```
-
-It works for any wide block, not just tables, so that you could widen the condition to wrap `pre` too:
-
-```ts
-if (node.tagName !== 'table' && node.tagName !== 'pre') return
-```
-
-If you'd rather not add a plugin, override the element instead:
-
-```tsx
-const components = useMemo(
-  () => ({
-    table: ({ node, ...props }) => (
-      <div className="typeset-scroll">
-        <table {...props} />
-      </div>
-    ),
-  }),
-  [],
-)
-```
+`node` is the hast element; leave it out of the props you spread onto `<table>`.
 
 ## License
 

@@ -1,12 +1,21 @@
 import { createHtmlSession } from '@pierre/words'
 import type { ReactNode } from 'react'
 import { Fragment, useMemo, useRef, useState } from 'react'
+import { CodeBlock } from './code-block.js'
 import { FootnoteProvider, FootnoteRef } from './footnote/footnote-ref.js'
-import { FOOTNOTE_REF_TAG } from './footnote/rehype-inline-footnotes.js'
-import { holdPendingFootnote, splitDocument } from './parse/blocks.js'
-import type { BlockProcessor } from './parse/processor.js'
-import { createProcessor, renderBlock } from './parse/processor.js'
-import type { PacingConfig, StreamupProps } from './types.js'
+import { FOOTNOTE_REF_TAG } from './footnote/inline-footnotes.js'
+import {
+  holdPendingFootnote,
+  settleOpenFence,
+  splitDocument,
+} from './parse/blocks.js'
+import { CODE_BLOCK_TAG } from './parse/code-blocks.js'
+import { renderBlock } from './parse/render-block.js'
+import type {
+  PacingConfig,
+  StreamupComponents,
+  StreamupProps,
+} from './types.js'
 import type { PacingOptions } from './usePacedStream.js'
 import { usePacedStream } from './usePacedStream.js'
 
@@ -45,7 +54,6 @@ export function Streamup({
   streaming = false,
   pacing,
   components,
-  plugins,
   math = true,
   footnotes = 'section',
 }: StreamupProps) {
@@ -63,42 +71,36 @@ export function Streamup({
   const html = useMemo(() => {
     const input =
       live && footnotes === 'inline' ? holdPendingFootnote(source) : source
-    return session.render(input, { incomplete: live, cjk: true, math }).html
+    const { html } = session.render(input, {
+      incomplete: live,
+      cjk: true,
+      math,
+    })
+    return settleOpenFence(html, input, live)
   }, [session, source, live, math, footnotes])
   const { blocks, footnotes: definitions } = useMemo(
     () => splitDocument(html, footnotes),
     [html, footnotes],
   )
 
-  const rehypePlugins = useMemo(
-    () => (plugins ?? []).flatMap((p) => p.rehypePlugins ?? []),
-    [plugins],
-  )
-  const processor = useMemo<BlockProcessor>(
-    () => createProcessor({ rehypePlugins, footnotes }),
-    [rehypePlugins, footnotes],
-  )
-
-  const renderComponents = useMemo(
-    () =>
-      footnotes === 'inline'
-        ? { ...components, [FOOTNOTE_REF_TAG]: FootnoteRef }
-        : components,
+  const renderComponents = useMemo<StreamupComponents>(
+    () => ({
+      [CODE_BLOCK_TAG]: CodeBlock,
+      ...components,
+      ...(footnotes === 'inline' && { [FOOTNOTE_REF_TAG]: FootnoteRef }),
+    }),
     [components, footnotes],
   )
 
+  // A block's element depends on its HTML and `renderComponents` alone, which
+  // also changes with `footnotes`: one identity check guards the cache.
   const cacheRef = useRef({
-    processor,
     components: renderComponents,
     map: new Map<string, ReactNode>(),
   })
   const rendered = useMemo(() => {
-    if (
-      cacheRef.current.processor !== processor ||
-      cacheRef.current.components !== renderComponents
-    ) {
+    if (cacheRef.current.components !== renderComponents) {
       cacheRef.current = {
-        processor,
         components: renderComponents,
         map: new Map<string, ReactNode>(),
       }
@@ -108,7 +110,7 @@ export function Streamup({
     const render = (block: string) => {
       const element =
         cache.get(block) ??
-        renderBlock(block, { processor, components: renderComponents })
+        renderBlock(block, { components: renderComponents, footnotes })
       next.set(block, element)
       return element
     }
@@ -125,7 +127,7 @@ export function Streamup({
     }
     cacheRef.current.map = next
     return result
-  }, [blocks, definitions, processor, renderComponents])
+  }, [blocks, definitions, renderComponents, footnotes])
 
   const body = rendered.blocks.map((element, i) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: blocks are positional during streaming
