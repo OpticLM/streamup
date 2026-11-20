@@ -58,6 +58,23 @@ describe('code blocks', () => {
     expect(probe('```ts\nlet a')).toContain('data-incomplete="false"')
   })
 
+  it.each([
+    ['a blockquote', '> ```ts\n> let a\n> ```'],
+    ['a list', '- ```ts\n  let a\n  ```'],
+    ['a nested list', '- a\n  - ```ts\n    let a\n    ```'],
+  ])('see a fence closed inside %s as complete', (_, markdown) => {
+    expect(probe(markdown, true)).toContain('data-incomplete="false"')
+    // ...and the same fence without its closing line as still streaming.
+    const open = markdown.split('\n').slice(0, -1).join('\n')
+    expect(probe(open, true)).toContain('data-incomplete="true"')
+  })
+
+  it('see a fence its container ends as complete', () => {
+    expect(probe('> ```ts\n> let a\n\nafter', true)).toContain(
+      'data-incomplete="false"',
+    )
+  })
+
   it('hold back the LF of a line still being written', () => {
     expect(probe('```ts\nlet a\nlet', true)).toContain('data-code="let a\nlet"')
     expect(probe('```ts\nlet a\nlet\n', true)).toContain(

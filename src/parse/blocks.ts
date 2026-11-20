@@ -82,8 +82,10 @@ const OPEN_FENCE = '<pre data-markdown-incomplete>'
  * Words marks an open fence whether or not more text is coming, and ends its
  * last line with LF even while the line is half written. Make the HTML say
  * what is true: an open fence is incomplete only while `live`, and then its
- * last line has no LF until `markdown` ends with one. There is at most one
- * open fence: the one the document ends in.
+ * last line has no LF until `markdown` ends with one. Words' own HTML
+ * formatter does the same before it calls its code plugins; without it,
+ * Words' Mermaid plugin draws half-written lines and blanks between them.
+ * There is at most one open fence: the one the document ends in.
  */
 export function settleOpenFence(
   html: string,
